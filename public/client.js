@@ -1,3 +1,26 @@
+const debug = true;
+var log = console.log;
+console.log = function () {
+    var first_parameter = arguments[0];
+    var other_parameters = Array.prototype.slice.call(arguments, 1);
+    function formatConsoleDate (date) {
+        var hour = date.getHours();
+        var minutes = date.getMinutes();
+        var seconds = date.getSeconds();
+        var milliseconds = date.getMilliseconds();
+        return '[' +
+               ((hour < 10) ? '0' + hour: hour) +
+               ':' +
+               ((minutes < 10) ? '0' + minutes: minutes) +
+               ':' +
+               ((seconds < 10) ? '0' + seconds: seconds) +
+               '.' +
+               ('00' + milliseconds).slice(-3) +
+               '] ';
+    }
+    log.apply(console, [formatConsoleDate(new Date()) + first_parameter].concat(other_parameters));
+};
+
 const socket = io();
 
 const lobbyInfo = document.getElementById('lobby-info');
@@ -7,27 +30,36 @@ const leaveLobbyButton = document.getElementById('leave-lobby');
 const createLobbyForm = document.getElementById('create-lobby-form');
 const usernameInput = document.getElementById('username');
 const lobbyNameInput = document.getElementById('lobby-name');
-let isInLobby = false;
+var isInLobby = false;
 
 createLobbyForm.addEventListener('submit', (e) => {
 	e.preventDefault();
 	if (isInLobby) {
-		alert('You are already in a lobby');
+		Swal.fire({
+			title: 'You are already in a lobby',
+			icon: 'error',
+			text: 'you can\'t join another :/',
+			timer: 3000,
+			timerProgressBar: true,
+			confirmButtonText: 'Alright'
+		});
 		return;
 	}
-	const username = usernameInput.value, lobbyName = lobbyNameInput.value;
-	socket.emit('createLobby', username, lobbyName);
-	usernameInput.disabled = true; // temporary
+	const username = usernameInput.value;
+	const lobbyName = lobbyNameInput.value;
+	socket.emit('serverCreateLobby', lobbyName, username);
 	lobbyNameInput.value = '';
 });
 
 leaveLobbyButton.addEventListener('click', () => {
-	socket.emit('leaveLobby');
+	socket.emit('serverLeaveLobby');
 });
 
-socket.on('lobbyList', (lobbies) => {
+socket.on('clientLobbyList', (lobbies) => {
+	if (debug) console.log("clientLobbyList", lobbies);
 	const lobbyList = document.getElementById('lobby-list');
 	lobbyList.innerHTML = '';
+	if (lobbies.length < 1) return lobbyList.textContent = "No public lobbies... create one!";
 	for (const lobby of lobbies) {
 		const element = document.createElement('div');
 		element.textContent = lobby.players.length + "/" + lobby.maxPlayers + " | " + lobby.name;
@@ -38,45 +70,63 @@ socket.on('lobbyList', (lobbies) => {
 		element.addEventListener('click', () => {
 			if (element.className === "full") return;
 			if (isInLobby) {
-				alert('You are already in a lobby');
+				Swal.fire({
+					title: 'You are already in a lobby',
+					icon: 'error',
+					text: 'you can\'t join another :/',
+					timer: 3000,
+					timerProgressBar: true,
+					confirmButtonText: 'Alright'
+				});
 				return;
 			}
-			socket.emit('joinLobby', lobby._id, usernameInput.value);
+			const username = usernameInput.value
+			socket.emit('serverJoinLobby', lobby._id, username);
 			isInLobby = true; // to remove later
-			usernameInput.disabled = true; // temporary
 		});
 	}
 });
 
-socket.on('editClient', (thing, value) => {
+socket.on('clientEdit', (thing, value) => {
+	if (debug) console.log('clientEdit', thing, value);
 	switch (thing) {
-		case isInLobby:
-			return isInLobby = value;
+		case "isInLobby":
+			isInLobby = value; 
+			return;
+		// case "usernameLock":
+		// 	return usernameLock = value;
 	}
 })
 
-socket.on('updateLobby', ({ lobby }) => {
+socket.on('clientUpdateLobby', (lobby) => {
+	if (debug) console.log("clientUpdateLobby", lobby);
 	currentLobby.textContent = `Current Lobby: ${lobby.name}`;
 	userList.innerHTML = '';
 	for (const player of lobby.players) {
 		const playerElement = document.createElement('div');
 		playerElement.textContent = player.username;
-		playerList.appendChild(playerElement);
+		userList.appendChild(playerElement);
 	}
 });
 
-socket.on('leaveLobby', () => {
+socket.on('clientLeaveLobby', () => {
+	if (debug) console.log("clientLeaveLobby");
 	currentLobby.textContent = '';
 	userList.innerHTML = '';
+	leaveLobbyButton.classList.add("hidden");
 	leaveLobbyButton.disabled = true;
-	usernameInput.disabled = false;
+	usernameInput.disabled = false; // temp
 });
 
-socket.on('errorMessage', (message) => {
-	alert(message);
+socket.on('clientPopup', async (object) => {
+	if (debug) console.log("clientPopup", object);
+	Swal.fire(object);
 });
 
 
-socket.on('joinedLobby', () => {
+socket.on('clientJoinedLobby', () => {
+	if (debug) console.log("clientJoinedLobby");
+	leaveLobbyButton.classList.remove("hidden");
 	leaveLobbyButton.disabled = false;
+	usernameInput.disabled = true; // temp
 });

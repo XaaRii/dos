@@ -1,3 +1,5 @@
+const debug = true;
+require('console-stamp')(console);
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
@@ -7,90 +9,149 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
+/// REPL
+const repl = require('repl');
+const r = repl.start({ prompt: '', useColors: true });
+r.context.debug = debug;
+r.context.server = server;
+r.context.io = io;
+r.context.lobbySystem = lobbySystem;
+r.context.sock = [];
+///
+
 const port = 3000;
 // lobbySystem.lobbyList = []
 
 io.on('connection', (socket) => {
-	console.log('A user connected at ' + socket.handshake.address + " | " + socket.id)
-	
-	socket.emit('lobbyList', lobbySystem.lobbyList);
+	if (debug) console.log('A user connected at ' + socket.handshake.address + " | " + socket.id);
+	if (debug) r.context.sock[socket.id] = socket; /// REPL
+	socket.emit('clientLobbyList', lobbySystem.getLobbyList());
 
-	socket.on('createLobby', async (username, lobbyName) => {
-		console.log("createLobby");
+	socket.on('serverRefreshLobby', async () => {
+		if (debug) console.log("serverRefreshLobby");
+		console.log(lobbySystem.getLobbyList());
+		lobbySystem.fetchLobbies().then(updatedLobbies => {
+			console.log(updatedLobbies);
+			socket.emit('clientLobbyList', updatedLobbies);
+		}).catch(e => reject(e));
+		// io.emit('clientLobbyList', lobbySystem.getLobbyList());
+	})
+	socket.on('serverCreateLobby', async (lobbyName, username) => {
+		if (debug) console.log("createLobby", lobbyName, username);
 		if (socket.lobby) {
-			socket.emit('errorMessage', 'You are already in a lobby');
-			socket.emit('editClient', 'isInLobby', true);
+			socket.emit('clientPopup', {
+				title: 'You are already in a lobby',
+				icon: 'error',
+				text: 'you can\'t join another :/',
+				timer: 3000,
+				timerProgressBar: true,
+				confirmButtonText: 'Alright'
+			});
+			socket.emit('clientEdit', 'isInLobby', true);
 			return;
 		}
 		try {
-			// Wait for lobbySystem.createLobby to return before proceeding
-			const newLobby = await lobbySystem.createLobby(username, lobbyName, 4);
-			console.log("to the socket now")
-			socket.emit("joinLobby", newLobby._id);
+			const newLobby = await lobbySystem.createLobby(lobbyName, username, 4);
+			joinLobby(newLobby._id, username);
 		} catch (err) {
 			console.error('Error creating lobby:', err);
 		}
-		// socket.username = username.length > 0 ? username : socket.id; // to be changed
-		// socket.lobby = newLobby;
-		// lobbySystem.addUser(newLobby._id, username, socket.id);
-		// io.emit('lobbyList', lobbySystem.lobbyList);
-		// socket.join(newLobby._id);
-		// socket.emit('updateLobby', newLobby);
-		// socket.emit('joinedLobby');
-
-		// socket.emit("joinLobby", newLobby._id);
 	});
 
-	socket.on('joinLobby', (lobbyId) => {
-		console.log("joinLobby");
+	socket.on('serverJoinLobby', async (lobbyId, username) => {
+		if (debug) console.log("serverJoinLobby");
+		joinLobby(lobbyId, username);
+	});
+	async function joinLobby(lobbyId, username) {
+		if (debug) console.log("server joinLobby function");
 		socket.username = username.length > 0 ? username : socket.id; // to be changed
 		if (socket.lobby) {
-			socket.emit('errorMessage', 'You are already in a lobby');
-			socket.emit('editClient', 'isInLobby', true);
+			socket.emit('clientPopup', {
+				title: 'You are already in a lobby',
+				icon: 'error',
+				text: 'you can\'t join another :/',
+				timer: 3000,
+				timerProgressBar: true,
+				confirmButtonText: 'Alright'
+			});
+			socket.emit('clientEdit', 'isInLobby', true);
 			return;
 		}
-
-		const result = lobbySystem.addUser(lobbyId, username, socket.id);
-		if (result.startsWith("error")) {
-			switch (result) {
-				case "errorLobbyNotFound":
-					return socket.emit('errorMessage', "This lobby doesn't seem to exist anymore, sorry.");
-				case "errorLobbyFull":
-					return socket.emit('errorMessage', "This lobby is full already.");
-				case "errorUsernameExists":
-					return socket.emit('errorMessage', "Someone with the same username is already in the lobby.");
-				default:
-					return socket.emit('errorMessage', "Error happened. Report this to website administrator.");
-			}
-		} else {
+		try {
+			const result = await lobbySystem.addUser(lobbyId, username, socket.id);
 			socket.lobby = result;
-			io.emit('lobbyList', lobbySystem.lobbyList);
+			if (debug) console.log("socket.lobby", result);
+			// if (debug) console.log("getLobbyList()", lobbySystem.getLobbyList());
+			io.emit('clientLobbyList', lobbySystem.getLobbyList());
 			socket.join(lobbyId);
-			io.to(lobbyId).emit('updateLobby', result);
-			socket.emit('joinedLobby');
+			io.to(lobbyId).emit('clientUpdateLobby', result);
+			socket.emit('clientJoinedLobby');
+		} catch (err) {
+			if (debug) console.log("joinLobbyError:", err);
+			switch (err) {
+				case "errorLobbyNotFound":
+					return socket.emit('clientPopup', {
+						title: 'Something\'s wrong...',
+						icon: 'error',
+						text: 'this lobby doesn\'t seem to exist anymore, sorry',
+						confirmButtonText: 'OK'
+					});
+				case "errorLobbyFull":
+					return socket.emit('clientPopup', {
+						title: 'This lobby is full already.',
+						icon: 'info',
+						confirmButtonText: 'OK',
+						timer: 3000,
+						timerProgressBar: true
+					});
+				case "errorUsernameExists":
+					socket.emit('clientEdit', 'isInLobby', false);
+					return socket.emit('clientPopup', {
+						title: 'Doopleganger?',
+						icon: 'question',
+						text: 'someone with the same username is already in the lobby...',
+						confirmButtonText: 'OK'
+					});
+				default:
+					return socket.emit('clientPopup', {
+						title: 'Something unexpected happened.',
+						icon: 'error',
+						text: 'Report this to website administrator',
+						confirmButtonText: 'OK'
+					});
+			}
 		}
-	});
+	}
 
-	socket.on('leaveLobby', () => {
-		console.log("leaveLobby");
-		if (!socket.lobby) return;
-		const lobby = socket.lobby;
-		lobbySystem.removeUser(lobby._id, socket.username);
-
-		io.emit('lobbyList', lobbySystem.lobbyList);
-		socket.leave(lobby._id);
-		socket.emit('leaveLobby');
-		io.to(lobby._id).emit('updateLobby', lobby);
-		delete socket.lobby;
+	socket.on('serverLeaveLobby', async () => {
+		if (debug) console.log("serverLeaveLobby");
+		const lobby = await socket.lobby;
+		if (!lobby) {
+			await socket.emit('clientEdit', 'isInLobby', false);
+			return socket.emit('clientLeaveLobby');
+		}
+		try {
+			const result = await lobbySystem.removeUser(lobby._id, socket.username, socket.id);
+			// if (debug) console.log("getLobbyList()", lobbySystem.getLobbyList());
+			io.emit('clientLobbyList', lobbySystem.getLobbyList());
+			await socket.leave(lobby._id);
+			await socket.emit('clientLeaveLobby');
+			await socket.emit('clientEdit', 'isInLobby', false);
+			io.to(lobby._id).emit('clientUpdateLobby', result);
+			delete socket.lobby;
+		} catch (err) {
+			console.error(err);
+		}
 	});
 
 	socket.on('disconnect', () => {
-		console.log('A user disconnected');
+		if (debug) console.log('A user disconnected at ' + socket.handshake.address + " | " + socket.id);
 		if (socket.lobby) {
 			const lobby = socket.lobby;
-			lobbySystem.removeUser(lobby._id, socket.username);
-			io.emit('lobbyList', lobbySystem.lobbyList);
-			io.to(lobby._id).emit('updateLobby', lobby);
+			lobbySystem.removeUser(lobby._id, socket.username, socket.id);
+			console.log(lobbySystem.getLobbyList());
+			io.emit('clientLobbyList', lobbySystem.getLobbyList());
+			io.to(lobby._id).emit('clientUpdateLobby', lobby);
 		}
 	});
 });
