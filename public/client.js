@@ -68,7 +68,7 @@ socket.on('clientLobbyList', (lobbies) => {
 		// element.id = lobby._id;
 		lobbyList.appendChild(element);
 		element.addEventListener('click', () => {
-			if (element.className === "full") return;
+			// if (element.className === "full") return;
 			if (isInLobby) {
 				Swal.fire({
 					title: 'You are already in a lobby',
@@ -82,7 +82,7 @@ socket.on('clientLobbyList', (lobbies) => {
 			}
 			const username = usernameInput.value
 			socket.emit('serverJoinLobby', lobby._id, username);
-			isInLobby = true; // to remove later
+			isInLobby = true;
 		});
 	}
 });
@@ -97,23 +97,49 @@ socket.on('clientEdit', (thing, value) => {
 		// 	return usernameLock = value;
 	}
 })
-
-socket.on('clientUpdateLobby', (lobby) => {
+ 
+ socket.on('clientUpdateLobby', (lobby) => {
 	if (debug) console.log("clientUpdateLobby", lobby);
 	currentLobby.textContent = `Current Lobby: ${lobby.name}`;
 	userList.innerHTML = '';
-	for (const player of lobby.players) {
+	for (let i = 0; i < lobby.players.length; i++) {
+		const player = lobby.players[i];
 		const playerElement = document.createElement('div');
-		playerElement.textContent = player.username;
+		const playerText = document.createElement('span');
+		playerText.className = 'player-name';
+		if (!i) playerText.textContent = "👑 ";
+		playerText.textContent += player.username;
+		playerElement.appendChild(playerText);
+
+		if (socket.id === lobby.players[0].sid && i) {
+			const kickButton = document.createElement('button');
+			kickButton.className = 'player-control';
+			kickButton.textContent = 'Kick';
+			kickButton.addEventListener('click', () => {
+				socket.emit('serverLeaveLobby', player.username);
+			});
+			playerElement.appendChild(kickButton);
+			/*
+			const makeLeaderButton = document.createElement('button');
+			makeLeaderButton.className = 'player-control';
+			makeLeaderButton.textContent = 'Make Leader';
+			makeLeaderButton.addEventListener('click', () => {
+				// logic // useless atm
+			});
+			playerElement.appendChild(makeLeaderButton);
+			*/
+		}
+
 		userList.appendChild(playerElement);
 	}
 });
+
 
 socket.on('clientLeaveLobby', () => {
 	if (debug) console.log("clientLeaveLobby");
 	currentLobby.textContent = '';
 	userList.innerHTML = '';
-	leaveLobbyButton.classList.add("hidden");
+	lobbyInfo.classList.add("hidden");
 	leaveLobbyButton.disabled = true;
 	usernameInput.disabled = false; // temp
 });
@@ -126,7 +152,7 @@ socket.on('clientPopup', async (object) => {
 
 socket.on('clientJoinedLobby', () => {
 	if (debug) console.log("clientJoinedLobby");
-	leaveLobbyButton.classList.remove("hidden");
+	lobbyInfo.classList.remove("hidden");
 	leaveLobbyButton.disabled = false;
 	usernameInput.disabled = true; // temp
 });

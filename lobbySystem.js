@@ -146,7 +146,7 @@ function removeUser(lobbyId, username, socketId) {
 			} else {
 				console.log('User removed from lobby:', numReplaced, 'lobby(s) updated');
 				if (err) return console.error('Error removeUser cleanup check:', err);
-				if (document.players.length < 1) await dbLobby.remove({ _id: lobbyId }, {}, (e, n) => {
+				if (document?.players?.length < 1) await dbLobby.remove({ _id: lobbyId }, {}, (e, n) => {
 					console.log("Empty lobby deleted.");
 				});
 				await fetchLobbies();

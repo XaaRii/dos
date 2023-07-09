@@ -20,6 +20,7 @@ r.context.sock = [];
 ///
 
 const port = 3000;
+var sockLobby = [];
 // lobbySystem.lobbyList = []
 
 io.on('connection', (socket) => {
@@ -38,7 +39,7 @@ io.on('connection', (socket) => {
 	})
 	socket.on('serverCreateLobby', async (lobbyName, username) => {
 		if (debug) console.log("createLobby", lobbyName, username);
-		if (socket.lobby) {
+		if (sockLobby[socket.id]) {
 			socket.emit('clientPopup', {
 				title: 'You are already in a lobby',
 				icon: 'error',
@@ -65,7 +66,7 @@ io.on('connection', (socket) => {
 	async function joinLobby(lobbyId, username) {
 		if (debug) console.log("server joinLobby function");
 		socket.username = username.length > 0 ? username : socket.id; // to be changed
-		if (socket.lobby) {
+		if (sockLobby[socket.id]) {
 			socket.emit('clientPopup', {
 				title: 'You are already in a lobby',
 				icon: 'error',
@@ -79,8 +80,8 @@ io.on('connection', (socket) => {
 		}
 		try {
 			const result = await lobbySystem.addUser(lobbyId, username, socket.id);
-			socket.lobby = result;
-			if (debug) console.log("socket.lobby", result);
+			sockLobby[socket.id] = result;
+			if (debug) console.log("sockLobby[socket.id]", result);
 			// if (debug) console.log("getLobbyList()", lobbySystem.getLobbyList());
 			io.emit('clientLobbyList', lobbySystem.getLobbyList());
 			socket.join(lobbyId);
@@ -123,22 +124,53 @@ io.on('connection', (socket) => {
 		}
 	}
 
-	socket.on('serverLeaveLobby', async () => {
-		if (debug) console.log("serverLeaveLobby");
-		const lobby = await socket.lobby;
+	socket.on('serverLeaveLobby', async (who) => {
+		if (debug) console.log("serverLeaveLobby", who);
+		const lobby = await sockLobby[socket.id];
 		if (!lobby) {
 			await socket.emit('clientEdit', 'isInLobby', false);
 			return socket.emit('clientLeaveLobby');
 		}
+		const uname = who === undefined ? socket.username : who;
 		try {
-			const result = await lobbySystem.removeUser(lobby._id, socket.username, socket.id);
+			if (who !== undefined) {
+				let lobbyList = lobbySystem.getLobbyList();
+				let realLobby = await lobbyList.find(l => l._id === lobby._id);
+				if (!realLobby) return console.error("realLobby wasn't found on player kick");
+				if (socket.id !== realLobby.players[0].sid) {
+					return socket.emit('clientPopup', {
+						title: 'You are not a lobby owner',
+						icon: 'error',
+						text: 'so stop acting like one',
+						confirmButtonText: 'OK'
+					});
+				}
+				let player = await realLobby.players.find(p => p.username === uname);
+				if (player) {
+					const result = await lobbySystem.removeUser(lobby._id, uname, player.sid);
+					io.emit('clientLobbyList', lobbySystem.getLobbyList());
+					await io.sockets.sockets.get(player.sid).leave(lobby._id);
+					await io.to(player.sid).emit('clientLeaveLobby');
+					await io.to(player.sid).emit('clientEdit', 'isInLobby', false);
+					io.to(player.sid).emit('clientPopup', {
+						title: 'You were kicked from the lobby',
+						icon: 'info',
+						confirmButtonText: 'OK'
+					});
+					io.to(lobby._id).emit('clientUpdateLobby', result);
+					delete sockLobby[player.sid];
+				}
+				return;
+			}
+			const result = await lobbySystem.removeUser(lobby._id, uname, socket.id);
 			// if (debug) console.log("getLobbyList()", lobbySystem.getLobbyList());
 			io.emit('clientLobbyList', lobbySystem.getLobbyList());
 			await socket.leave(lobby._id);
 			await socket.emit('clientLeaveLobby');
 			await socket.emit('clientEdit', 'isInLobby', false);
 			io.to(lobby._id).emit('clientUpdateLobby', result);
-			delete socket.lobby;
+			delete sockLobby[socket.id];
+			return;
 		} catch (err) {
 			console.error(err);
 		}
@@ -146,12 +178,13 @@ io.on('connection', (socket) => {
 
 	socket.on('disconnect', () => {
 		if (debug) console.log('A user disconnected at ' + socket.handshake.address + " | " + socket.id);
-		if (socket.lobby) {
-			const lobby = socket.lobby;
+		if (sockLobby[socket.id]) {
+			const lobby = sockLobby[socket.id];
 			lobbySystem.removeUser(lobby._id, socket.username, socket.id);
 			console.log(lobbySystem.getLobbyList());
 			io.emit('clientLobbyList', lobbySystem.getLobbyList());
 			io.to(lobby._id).emit('clientUpdateLobby', lobby);
+			delete sockLobby[socket.id];
 		}
 	});
 });

@@ -19,3 +19,11 @@ h1 {
   display: none;
   /* visibility: hidden; */
 }
+
+.player-name {
+  margin-right: 50px; /* Adjust as needed */
+}
+
+.player-control {
+  margin-left: 12px; /* Adjust as needed */
+}
