@@ -1,24 +1,24 @@
 const debug = true;
 var log = console.log;
 console.log = function () {
-    var first_parameter = arguments[0];
-    var other_parameters = Array.prototype.slice.call(arguments, 1);
-    function formatConsoleDate (date) {
-        var hour = date.getHours();
-        var minutes = date.getMinutes();
-        var seconds = date.getSeconds();
-        var milliseconds = date.getMilliseconds();
-        return '[' +
-               ((hour < 10) ? '0' + hour: hour) +
-               ':' +
-               ((minutes < 10) ? '0' + minutes: minutes) +
-               ':' +
-               ((seconds < 10) ? '0' + seconds: seconds) +
-               '.' +
-               ('00' + milliseconds).slice(-3) +
-               '] ';
-    }
-    log.apply(console, [formatConsoleDate(new Date()) + first_parameter].concat(other_parameters));
+	var first_parameter = arguments[0];
+	var other_parameters = Array.prototype.slice.call(arguments, 1);
+	function formatConsoleDate(date) {
+		var hour = date.getHours();
+		var minutes = date.getMinutes();
+		var seconds = date.getSeconds();
+		var milliseconds = date.getMilliseconds();
+		return '[' +
+			((hour < 10) ? '0' + hour : hour) +
+			':' +
+			((minutes < 10) ? '0' + minutes : minutes) +
+			':' +
+			((seconds < 10) ? '0' + seconds : seconds) +
+			'.' +
+			('00' + milliseconds).slice(-3) +
+			'] ';
+	}
+	log.apply(console, [formatConsoleDate(new Date()) + first_parameter].concat(other_parameters));
 };
 
 const socket = io();
@@ -27,6 +27,7 @@ const lobbyInfo = document.getElementById('lobby-info');
 const currentLobby = document.getElementById('current-lobby');
 const userList = document.getElementById('user-list');
 const leaveLobbyButton = document.getElementById('leave-lobby');
+const startGameButton = document.getElementById('start-game');
 const createLobbyForm = document.getElementById('create-lobby-form');
 const usernameInput = document.getElementById('username');
 const lobbyNameInput = document.getElementById('lobby-name');
@@ -55,6 +56,10 @@ leaveLobbyButton.addEventListener('click', () => {
 	socket.emit('serverLeaveLobby');
 });
 
+startGameButton.addEventListener('click', () => {
+	socket.emit('serverGameStart');
+});
+
 socket.on('clientLobbyList', (lobbies) => {
 	if (debug) console.log("clientLobbyList", lobbies);
 	const lobbyList = document.getElementById('lobby-list');
@@ -81,6 +86,10 @@ socket.on('clientLobbyList', (lobbies) => {
 				return;
 			}
 			const username = usernameInput.value
+			if (!username) return Swal.fire({
+				title: 'You must pick an username first.',
+				confirmButtonText: 'Alright'
+			});
 			socket.emit('serverJoinLobby', lobby._id, username);
 			isInLobby = true;
 		});
@@ -91,46 +100,65 @@ socket.on('clientEdit', (thing, value) => {
 	if (debug) console.log('clientEdit', thing, value);
 	switch (thing) {
 		case "isInLobby":
-			isInLobby = value; 
+			isInLobby = value;
 			return;
 		// case "usernameLock":
 		// 	return usernameLock = value;
 	}
 })
- 
- socket.on('clientUpdateLobby', (lobby) => {
+
+socket.on('clientUpdateLobby', (lobby) => {
 	if (debug) console.log("clientUpdateLobby", lobby);
-	currentLobby.textContent = `Current Lobby: ${lobby.name}`;
-	userList.innerHTML = '';
-	for (let i = 0; i < lobby.players.length; i++) {
-		const player = lobby.players[i];
-		const playerElement = document.createElement('div');
-		const playerText = document.createElement('span');
-		playerText.className = 'player-name';
-		if (!i) playerText.textContent = "👑 ";
-		playerText.textContent += player.username;
-		playerElement.appendChild(playerText);
+	if (lobby.name !== undefined) currentLobby.textContent = `Current Lobby: ${lobby.name}`;
+	if (lobby.players !== undefined) {
+		userList.innerHTML = '';
+		for (let i = 0; i < lobby.players.length; i++) {
+			const player = lobby.players[i];
+			const playerElement = document.createElement('div');
+			const playerText = document.createElement('span');
+			playerText.className = 'player-name';
+			if (!i) {
+				startGameButton.disabled = false;
+				startGameButton.classList.remove("hidden");
+				playerText.textContent = "👑 ";
+			}
+			playerText.textContent += player.username;
+			playerElement.appendChild(playerText);
 
-		if (socket.id === lobby.players[0].sid && i) {
-			const kickButton = document.createElement('button');
-			kickButton.className = 'player-control';
-			kickButton.textContent = 'Kick';
-			kickButton.addEventListener('click', () => {
-				socket.emit('serverLeaveLobby', player.username);
-			});
-			playerElement.appendChild(kickButton);
-			/*
-			const makeLeaderButton = document.createElement('button');
-			makeLeaderButton.className = 'player-control';
-			makeLeaderButton.textContent = 'Make Leader';
-			makeLeaderButton.addEventListener('click', () => {
-				// logic // useless atm
-			});
-			playerElement.appendChild(makeLeaderButton);
-			*/
+			if (socket.id === lobby.players[0].sid && i) {
+				const kickButton = document.createElement('button');
+				kickButton.className = 'player-control';
+				kickButton.textContent = 'Kick';
+				kickButton.addEventListener('click', () => {
+					socket.emit('serverLeaveLobby', player.username);
+				});
+				playerElement.appendChild(kickButton);
+				/*
+				const makeLeaderButton = document.createElement('button');
+				makeLeaderButton.className = 'player-control';
+				makeLeaderButton.textContent = 'Make Leader';
+				makeLeaderButton.addEventListener('click', () => {
+					// logic // useless atm
+				});
+				playerElement.appendChild(makeLeaderButton);
+				*/
+			}
+			userList.appendChild(playerElement);
 		}
-
-		userList.appendChild(playerElement);
+		socket.id === lobby.players[0].sid ?
+		startGameButton.classList.remove("hidden") :
+		startGameButton.classList.add("hidden");
+	}
+	if (lobby.started !== undefined) {
+		switch (lobby.started) {
+			case true:
+				// hide shit, disable buttons
+				break;
+		
+			case false:
+				// show shit, enable buttons
+				break;
+		}
 	}
 });
 
@@ -156,3 +184,63 @@ socket.on('clientJoinedLobby', () => {
 	leaveLobbyButton.disabled = false;
 	usernameInput.disabled = true; // temp
 });
+
+
+const addC = document.getElementById('addC');
+const remC = document.getElementById('remC');
+const hand = [];
+addC.addEventListener('click', async () => {
+	await hand.push("1_1");
+	renderHand(hand);
+});
+remC.addEventListener('click', async () => {
+	await hand.pop();
+	renderHand(hand);
+});
+
+function renderHand(cards) {
+  const spritesheet = new Image();
+	spritesheet.src = "./assets/default/deck.svg";
+    
+	spritesheet.onload = function() {
+        const sheetWidth = this.naturalWidth;
+        const sheetHeight = this.naturalHeight;
+
+        const cardWidth = sheetWidth / 14;
+        const cardHeight = sheetHeight / 8;
+        
+        document.documentElement.style.setProperty('--card-count', cards.length);
+        document.documentElement.style.setProperty('--card-width', `${cardWidth}px`);
+        document.documentElement.style.setProperty('--max-margin-right', `10px`);
+
+        const cardList = document.querySelector('#cardList');
+	    	cardList.innerHTML = '';
+        for (let card of cards) {
+            const [row, col] = card.split('_').map(Number);
+
+            let listItem = document.createElement('li');
+            listItem.classList.add('card');
+			// listItem.style.marginRight = '10px';     // creates space between cards
+
+            let cardSprite = document.createElement('div');
+
+            // Compute the background position
+            const bgPosX = -col * cardWidth;
+            const bgPosY = -row * cardHeight;
+
+            cardSprite.style.backgroundImage = `url('${spritesheet.src}')`;
+            cardSprite.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
+            cardSprite.style.width = `${cardWidth}px`;
+            cardSprite.style.height = `${cardHeight}px`;
+		      	// cardSprite.style.transform = "scale(0.25)";
+
+            // Add the click event
+            cardSprite.addEventListener('click', function() {
+                console.log(`You selected card: ${card}`);
+            });
+
+            listItem.appendChild(cardSprite);
+            cardList.appendChild(listItem);
+        }
+    }
+}

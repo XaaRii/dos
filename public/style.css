@@ -17,13 +17,51 @@ h1 {
 
 .hidden {
   display: none;
-  /* visibility: hidden; */
 }
 
 .player-name {
   margin-right: 50px; /* Adjust as needed */
 }
-
 .player-control {
   margin-left: 12px; /* Adjust as needed */
 }
+
+
+/* cards in hand */
+.player-hand {
+  width: 100vw;
+  overflow-x: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid red;
+}
+
+.card-list {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  border: 1px solid green;
+}
+
+.card {
+  margin-right: calc(80vw / (var(--card-count)) - (var(--card-width) + 5px ));
+  transition: margin-bottom 0.2s ease-in-out;
+  margin-top: 0px;
+  scale: 20%;
+  border: 1px solid blue;
+}
+
+.card:hover {
+  margin-top: -30px;
+}
+
+
+/********
+calc(   (  80viewport - šířka karty * počet karet ) / (   počet karet + 1    )    )
+**********/

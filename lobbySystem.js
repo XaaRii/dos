@@ -38,7 +38,7 @@ function fetchLobbies() {
 			}
 			lobbyList = lobbies;
 			console.log('fetchLobbies():', lobbies);
-			return resolve(lobbies);
+			return resolve();
 		});
 	});
 }

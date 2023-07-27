@@ -1,19 +1,24 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Dos!</title>
   <link rel="stylesheet" type="text/css" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 </head>
+
 <body>
   <h1>Lobby List</h1>
-  
+
   <div id="lobby-info" class="hidden">
     <h2 id="current-lobby"></h2>
     <div id="user-list"></div>
     <br>
-    <button id="leave-lobby" disabled>Leave Lobby</button>
+    <span>
+      <button id="leave-lobby" disabled>Leave Lobby</button>
+      <button id="start-game" disabled>Start Game</button>
+    </span>
     <br>
     ---------------------------
   </div>
@@ -27,7 +32,18 @@
     <button type="submit">Create Lobby</button>
   </form>
 
+  <p>
+    Game:
+      <button id="addC">+1 card</button>
+      <button id="remC">-1 card</button>
+    <div id="playerHand" class="player-hand">
+      <ul id="cardList" class="card-list">
+      </ul>
+    </div>
+  </p>
+  
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>
+
 </html>

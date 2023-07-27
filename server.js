@@ -28,15 +28,45 @@ io.on('connection', (socket) => {
 	if (debug) r.context.sock[socket.id] = socket; /// REPL
 	socket.emit('clientLobbyList', lobbySystem.getLobbyList());
 
+	socket.on('serverGameStart', async () => {
+		if (debug) console.log("serverGameStart");
+		const lobby = await sockLobby[socket.id];
+		if (!lobby) {
+			await socket.emit('clientEdit', 'isInLobby', false);
+			return socket.emit('clientLeaveLobby');
+		}
+
+		try {
+			let lobbyList = lobbySystem.getLobbyList();
+			let realLobby = await lobbyList.find(l => l._id === lobby._id);
+			if (!realLobby) return console.error("realLobby wasn't found on game start request");
+			if (realLobby.started) return socket.emit('clientPopup', {
+				title: 'Game is already running.',
+				icon: 'info',
+				confirmButtonText: 'OK'
+			});
+			if (socket.id !== realLobby.players[0].sid) return socket.emit('clientPopup', {
+				title: 'You are not a lobby owner',
+				icon: 'error',
+				text: 'so stop acting like one',
+				confirmButtonText: 'OK'
+			});
+
+			await lobbySystem.startGame(lobby._id);
+					io.emit('clientLobbyList', lobbySystem.getLobbyList());
+					io.to(lobby._id).emit('clientUpdateLobby', { started: true });
+		} catch (err) {
+			console.error(err);
+		}
+
+	})
+
 	socket.on('serverRefreshLobby', async () => {
 		if (debug) console.log("serverRefreshLobby");
-		console.log(lobbySystem.getLobbyList());
-		lobbySystem.fetchLobbies().then(updatedLobbies => {
-			console.log(updatedLobbies);
-			socket.emit('clientLobbyList', updatedLobbies);
-		}).catch(e => reject(e));
-		// io.emit('clientLobbyList', lobbySystem.getLobbyList());
+		if (debug) console.log(lobbySystem.getLobbyList());
+		socket.emit('clientLobbyList', lobbySystem.getLobbyList());
 	})
+
 	socket.on('serverCreateLobby', async (lobbyName, username) => {
 		if (debug) console.log("createLobby", lobbyName, username);
 		if (sockLobby[socket.id]) {
@@ -176,14 +206,14 @@ io.on('connection', (socket) => {
 		}
 	});
 
-	socket.on('disconnect', () => {
+	socket.on('disconnect', async () => {
 		if (debug) console.log('A user disconnected at ' + socket.handshake.address + " | " + socket.id);
 		if (sockLobby[socket.id]) {
 			const lobby = sockLobby[socket.id];
-			lobbySystem.removeUser(lobby._id, socket.username, socket.id);
+			const result = await lobbySystem.removeUser(lobby._id, socket.username, socket.id);
 			console.log(lobbySystem.getLobbyList());
 			io.emit('clientLobbyList', lobbySystem.getLobbyList());
-			io.to(lobby._id).emit('clientUpdateLobby', lobby);
+			await io.to(lobby._id).emit('clientUpdateLobby', result);
 			delete sockLobby[socket.id];
 		}
 	});
