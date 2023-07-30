@@ -146,15 +146,15 @@ socket.on('clientUpdateLobby', (lobby) => {
 			userList.appendChild(playerElement);
 		}
 		socket.id === lobby.players[0].sid ?
-		startGameButton.classList.remove("hidden") :
-		startGameButton.classList.add("hidden");
+			startGameButton.classList.remove("hidden") :
+			startGameButton.classList.add("hidden");
 	}
 	if (lobby.started !== undefined) {
 		switch (lobby.started) {
 			case true:
 				// hide shit, disable buttons
 				break;
-		
+
 			case false:
 				// show shit, enable buttons
 				break;
@@ -186,61 +186,99 @@ socket.on('clientJoinedLobby', () => {
 });
 
 
-const addC = document.getElementById('addC');
-const remC = document.getElementById('remC');
+const addC = document.getElementById('addC'); // temp
+const remC = document.getElementById('remC'); // temp
 const hand = [];
 addC.addEventListener('click', async () => {
-	await hand.push("1_1");
+	hand.push(Math.floor(Math.random() * 55));
 	renderHand(hand);
 });
 remC.addEventListener('click', async () => {
+	if (hand.length < 1) return;
 	await hand.pop();
 	renderHand(hand);
 });
 
 function renderHand(cards) {
+	const playerHand = document.getElementById("playerHand");
+	playerHand.innerHTML = '';
+
+	// left 2,5%+ offset   /* right 87.5%- offset */  limit
+	const mysteriousNumber = Math.min(5, 90 / cards.length);  //  (baseOffset(95) - wanted result) / cards
+	let offsetAmount = 95 - cards.length * mysteriousNumber;
+	let cardOffset = "0%";
+		
+	const [ totalXs, totalYs, width, height ] = [ 10, 6, 1000, 900 ]
+	const cardSpriteWidth = width / totalXs;
+	const cardSpriteHeight = height / totalYs;
+	const spritePath = "./assets/dev-cards.png";
+	
+	for (let i = 0; i < cards.length; i++) {
+		cardOffset = `calc(${offsetAmount / 2}% + ${i * mysteriousNumber}%)`;
+		let card = document.createElement('div');
+		card.className = 'card';
+
+		card.style.backgroundImage = `url(${spritePath})`;
+		card.style.backgroundSize = `${width}px ${height}px`;
+		card.style.backgroundRepeat = 'no-repeat';
+		let [ cardX, cardY] = [ cards[i] % totalXs, Math.ceil(cards[i] / totalXs)-1 ];
+		card.style.backgroundPosition = `-${cardX * cardSpriteWidth}px -${cardY * cardSpriteHeight}px`;
+
+		card.style.left = cardOffset;
+		card.style.zIndex = i;
+		card.addEventListener('click', function() {
+			console.log(`You selected card: ${cards[i]}`);
+		});
+		playerHand.appendChild(card);
+	}
+}
+
+
+/*
+function renderHand(cards) {
   const spritesheet = new Image();
 	spritesheet.src = "./assets/default/deck.svg";
     
 	spritesheet.onload = function() {
-        const sheetWidth = this.naturalWidth;
-        const sheetHeight = this.naturalHeight;
+		const sheetWidth = this.naturalWidth;
+		const sheetHeight = this.naturalHeight;
 
-        const cardWidth = sheetWidth / 14;
-        const cardHeight = sheetHeight / 8;
-        
-        document.documentElement.style.setProperty('--card-count', cards.length);
-        document.documentElement.style.setProperty('--card-width', `${cardWidth}px`);
-        document.documentElement.style.setProperty('--max-margin-right', `10px`);
+		const cardWidth = sheetWidth / 14;
+		const cardHeight = sheetHeight / 8;
+	    
+		document.documentElement.style.setProperty('--card-count', cards.length);
+		document.documentElement.style.setProperty('--card-width', `${cardWidth}px`);
+		document.documentElement.style.setProperty('--max-margin-right', `10px`);
 
-        const cardList = document.querySelector('#cardList');
-	    	cardList.innerHTML = '';
-        for (let card of cards) {
-            const [row, col] = card.split('_').map(Number);
+		const cardList = document.querySelector('#cardList');
+			cardList.innerHTML = '';
+		for (let card of cards) {
+			const [row, col] = card.split('_').map(Number);
 
-            let listItem = document.createElement('li');
-            listItem.classList.add('card');
+			let listItem = document.createElement('li');
+			listItem.classList.add('card');
 			// listItem.style.marginRight = '10px';     // creates space between cards
 
-            let cardSprite = document.createElement('div');
+			let cardSprite = document.createElement('div');
 
-            // Compute the background position
-            const bgPosX = -col * cardWidth;
-            const bgPosY = -row * cardHeight;
+			// Compute the background position
+			const bgPosX = -col * cardWidth;
+			const bgPosY = -row * cardHeight;
 
-            cardSprite.style.backgroundImage = `url('${spritesheet.src}')`;
-            cardSprite.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
-            cardSprite.style.width = `${cardWidth}px`;
-            cardSprite.style.height = `${cardHeight}px`;
-		      	// cardSprite.style.transform = "scale(0.25)";
+			cardSprite.style.backgroundImage = `url('${spritesheet.src}')`;
+			cardSprite.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
+			cardSprite.style.width = `${cardWidth}px`;
+			cardSprite.style.height = `${cardHeight}px`;
+					// cardSprite.style.transform = "scale(0.25)";
 
-            // Add the click event
-            cardSprite.addEventListener('click', function() {
-                console.log(`You selected card: ${card}`);
-            });
+			// Add the click event
+			cardSprite.addEventListener('click', function() {
+				console.log(`You selected card: ${card}`);
+			});
 
-            listItem.appendChild(cardSprite);
-            cardList.appendChild(listItem);
-        }
-    }
+			listItem.appendChild(cardSprite);
+			cardList.appendChild(listItem);
+		}
+	}
 }
+*/

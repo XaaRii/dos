@@ -1,3 +1,4 @@
+/* global */
 body {
   font-family: Arial, sans-serif;
   margin: 20px;
@@ -7,6 +8,11 @@ h1 {
   text-align: center;
 }
 
+.hidden {
+  display: none;
+}
+
+/* lobbylist */
 #lobby-list {
   margin-top: 20px;
 }
@@ -15,19 +21,42 @@ h1 {
   margin-top: 20px;
 }
 
-.hidden {
-  display: none;
-}
-
 .player-name {
-  margin-right: 50px; /* Adjust as needed */
+  margin-right: 50px;
 }
 .player-control {
-  margin-left: 12px; /* Adjust as needed */
+  margin-left: 12px;
+}
+
+/* game */
+#gameObject {
+  position: relative;
+}
+#playerHand {
+  width: 100%;
+  position: fixed;
+  bottom: 160px;
+  overflow: visible;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  border: 1px solid red;
+}
+
+.card {
+  position: absolute;
+  width: 100px;
+  height: 150px;
+  margin: 1em;
+  transition: margin-top 0.2s ease-in-out;
+  margin-top: 0px;
+}
+.card:hover {
+  margin-top: -30px;
 }
 
 
-/* cards in hand */
+/*
 .player-hand {
   width: 100vw;
   overflow-x: hidden;
@@ -51,17 +80,8 @@ h1 {
 
 .card {
   margin-right: calc(80vw / (var(--card-count)) - (var(--card-width) + 5px ));
-  transition: margin-bottom 0.2s ease-in-out;
-  margin-top: 0px;
   scale: 20%;
   border: 1px solid blue;
 }
 
-.card:hover {
-  margin-top: -30px;
-}
-
-
-/********
-calc(   (  80viewport - šířka karty * počet karet ) / (   počet karet + 1    )    )
-**********/
+*/
