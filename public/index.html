@@ -1,33 +1,55 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Dos!</title>
   <link rel="stylesheet" type="text/css" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 </head>
+
 <body>
-  <h1>Lobby List</h1>
-  
-  <div id="lobby-info" class="hidden">
-    <h2 id="current-lobby"></h2>
-    <div id="user-list"></div>
-    <br>
-    <button id="leave-lobby" disabled>Leave Lobby</button>
-    <br>
+  <div id="lobbyObject">
+    <h1>Lobby List</h1>
+    <div id="lobby-info" class="hidden">
+      <h2 id="current-lobby"></h2>
+      <div id="user-list"></div>
+      <br>
+      <span>
+        <button id="leave-lobby" disabled>Leave Lobby</button>
+        <button id="start-game" disabled>Start Game</button>
+      </span>
+      <br>
+      ---------------------------
+    </div>
+    <p> Lobby list:
+    <div id="lobby-list"></div>
+    </p>
     ---------------------------
+    <form id="create-lobby-form">
+      <input type="text" id="username" placeholder="Enter username" required>
+      <input type="text" id="lobby-name" placeholder="Enter lobby name" required>
+      <button type="submit">Create Lobby</button>
+    </form>
   </div>
-  <p> Lobby list:
-  <div id="lobby-list"></div>
-  </p>
-  ---------------------------
-  <form id="create-lobby-form">
-    <input type="text" id="username" placeholder="Enter username" required>
-    <input type="text" id="lobby-name" placeholder="Enter lobby name" required>
-    <button type="submit">Create Lobby</button>
-  </form>
+
+  <div id="gameObject" class="hidden">
+    <div id="playerNameplates">
+      <!-- automatically populated cards here -->
+    </div>
+    <div id="piles">
+      <div id="drawPile"></div>
+      <div id="dropPile"></div>
+    </div>
+    <div id="ownNameplate" style="position: fixed;bottom: 180px;"></div>
+
+    <div id="playerHand">
+      <!-- automagically populated cards here -->
+    </div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>
+
 </html>

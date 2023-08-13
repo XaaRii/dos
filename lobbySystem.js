@@ -13,6 +13,9 @@ function createLobby(lobbyName, username, maxPlayers) {
 		name: lobbyName ?? username + "'s Lobby",
 		maxPlayers: maxPlayers,
 		players: [],
+		modifiers: {
+			startingCardCount: 7
+		},
 		started: false
 	};
 
@@ -38,7 +41,7 @@ function fetchLobbies() {
 			}
 			lobbyList = lobbies;
 			console.log('fetchLobbies():', lobbies);
-			return resolve(lobbies);
+			return resolve();
 		});
 	});
 }
@@ -165,5 +168,5 @@ module.exports = {
 	stopGame,
 	addUser,
 	removeUser,
-	getLobbyList: function() { return lobbyList; }
+	getLobbyList: function () { return lobbyList; }
 };

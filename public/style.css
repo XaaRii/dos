@@ -1,3 +1,4 @@
+/* global */
 body {
   font-family: Arial, sans-serif;
   margin: 20px;
@@ -7,6 +8,11 @@ h1 {
   text-align: center;
 }
 
+.hidden {
+  display: none;
+}
+
+/* lobbylist */
 #lobby-list {
   margin-top: 20px;
 }
@@ -15,15 +21,124 @@ h1 {
   margin-top: 20px;
 }
 
-.hidden {
-  display: none;
-  /* visibility: hidden; */
-}
-
 .player-name {
-  margin-right: 50px; /* Adjust as needed */
+  margin-right: 50px;
+}
+.player-control {
+  margin-left: 12px;
 }
 
-.player-control {
-  margin-left: 12px; /* Adjust as needed */
+
+/* game */
+#gameObject {
+  position: relative;
 }
+#playerHand {
+  width: 100%;
+  position: fixed;
+  bottom: 160px;
+  overflow: visible;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  border: 1px solid red;
+}
+
+.card {
+  position: absolute;
+  width: 100px;
+  height: 150px;
+  margin: 1em;
+  transform: translate(-50%);
+  transition: margin-top 0.2s ease-in-out;
+  margin-top: 0px;
+}
+.card:hover {
+  margin-top: -30px;
+}
+
+#playerNameplates {
+  display: flex;
+  justify-content: space-around;
+}
+
+#playerNameplates > * {
+  flex-shrink: 1;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+#playerNameplates > *, #ownNameplate > * {
+  background-repeat: no-repeat;
+  background-size: contain;
+  width: 200px;
+  height: 60px;
+}
+
+.nameplateName {
+  padding-left: 10px;
+  text-align: left;
+  text-rendering: auto;
+  line-height: 35px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameplateCardCount {
+  padding-right: 50px;
+  display: grid;
+  justify-content: end;
+}
+
+#piles {
+  display: flex;
+  justify-content: center;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#drawPile, #dropPile {
+  background-image: url("./assets/empty-stock.png");
+  background-repeat: no-repeat;
+  background-size: contain;
+  width: 100px;
+  height: 150px;
+  margin: 0 10px;
+}
+
+
+/* debug */
+
+/*
+.player-hand {
+  width: 100vw;
+  overflow-x: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid red;
+}
+
+.card-list {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  border: 1px solid green;
+}
+
+.card {
+  margin-right: calc(80vw / (var(--card-count)) - (var(--card-width) + 5px ));
+  scale: 20%;
+  border: 1px solid blue;
+}
+
+*/
