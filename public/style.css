@@ -28,6 +28,7 @@ h1 {
   margin-left: 12px;
 }
 
+
 /* game */
 #gameObject {
   position: relative;
@@ -48,6 +49,7 @@ h1 {
   width: 100px;
   height: 150px;
   margin: 1em;
+  transform: translate(-50%);
   transition: margin-top 0.2s ease-in-out;
   margin-top: 0px;
 }
@@ -55,6 +57,61 @@ h1 {
   margin-top: -30px;
 }
 
+#playerNameplates {
+  display: flex;
+  justify-content: space-around;
+}
+
+#playerNameplates > * {
+  flex-shrink: 1;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+#playerNameplates > *, #ownNameplate > * {
+  background-repeat: no-repeat;
+  background-size: contain;
+  width: 200px;
+  height: 60px;
+}
+
+.nameplateName {
+  padding-left: 10px;
+  text-align: left;
+  text-rendering: auto;
+  line-height: 35px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameplateCardCount {
+  padding-right: 50px;
+  display: grid;
+  justify-content: end;
+}
+
+#piles {
+  display: flex;
+  justify-content: center;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#drawPile, #dropPile {
+  background-image: url("./assets/empty-stock.png");
+  background-repeat: no-repeat;
+  background-size: contain;
+  width: 100px;
+  height: 150px;
+  margin: 0 10px;
+}
+
+
+/* debug */
 
 /*
 .player-hand {

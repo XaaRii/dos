@@ -31,7 +31,16 @@ const startGameButton = document.getElementById('start-game');
 const createLobbyForm = document.getElementById('create-lobby-form');
 const usernameInput = document.getElementById('username');
 const lobbyNameInput = document.getElementById('lobby-name');
-var isInLobby = false;
+const lobbyObject = document.getElementById('lobbyObject');
+const gameObject = document.getElementById('gameObject');
+const playerNameplates = document.getElementById('playerNameplates');
+const playerHand = document.getElementById("playerHand");
+const ownNameplate = document.getElementById('ownNameplate');
+
+var username = "", isInLobby = false, myTurn = false, myOffset = -1;
+const [totalXs, totalYs, width, height] = [15, 5, 1500, 750];
+const [cardSpriteWidth, cardSpriteHeight] = [width / totalXs, height / totalYs];
+var [skinCards, skinBack, emptyStock] = ["./assets/dev-cards.png", "./assets/dev-back.png", "./assets/empty-stock.png"];
 
 createLobbyForm.addEventListener('submit', (e) => {
 	e.preventDefault();
@@ -46,7 +55,7 @@ createLobbyForm.addEventListener('submit', (e) => {
 		});
 		return;
 	}
-	const username = usernameInput.value;
+	username = usernameInput.value;
 	const lobbyName = lobbyNameInput.value;
 	socket.emit('serverCreateLobby', lobbyName, username);
 	lobbyNameInput.value = '';
@@ -69,11 +78,15 @@ socket.on('clientLobbyList', (lobbies) => {
 		const element = document.createElement('div');
 		element.textContent = lobby.players.length + "/" + lobby.maxPlayers + " | " + lobby.name;
 		if (lobby.players.length >= lobby.maxPlayers) element.className = "full";
+		if (lobby.started === true) {
+			element.className = "ongoing";
+			element.style.opacity = 0.5;
+		}
 		else element.className = "";
 		// element.id = lobby._id;
 		lobbyList.appendChild(element);
 		element.addEventListener('click', () => {
-			// if (element.className === "full") return;
+			if (element.className === "full" || element.className === "ongoing") return;
 			if (isInLobby) {
 				Swal.fire({
 					title: 'You are already in a lobby',
@@ -85,7 +98,7 @@ socket.on('clientLobbyList', (lobbies) => {
 				});
 				return;
 			}
-			const username = usernameInput.value
+			username = usernameInput.value
 			if (!username) return Swal.fire({
 				title: 'You must pick an username first.',
 				confirmButtonText: 'Alright'
@@ -106,6 +119,31 @@ socket.on('clientEdit', (thing, value) => {
 		// 	return usernameLock = value;
 	}
 })
+
+socket.on('clientLeaveLobby', () => {
+	if (debug) console.log("clientLeaveLobby");
+	currentLobby.textContent = '';
+	userList.innerHTML = '';
+	lobbyInfo.classList.add("hidden");
+	leaveLobbyButton.disabled = true;
+	usernameInput.disabled = false; // temp
+});
+
+socket.on('clientPopup', async (object) => {
+	if (debug) console.log("clientPopup", object);
+	Swal.fire(object);
+});
+
+
+socket.on('clientJoinedLobby', () => {
+	if (debug) console.log("clientJoinedLobby");
+	lobbyInfo.classList.remove("hidden");
+	leaveLobbyButton.disabled = false;
+	usernameInput.disabled = true; // temp
+	lobbyObject.classList.remove("hidden");
+	gameObject.classList.add("hidden");
+});
+
 
 socket.on('clientUpdateLobby', (lobby) => {
 	if (debug) console.log("clientUpdateLobby", lobby);
@@ -133,15 +171,6 @@ socket.on('clientUpdateLobby', (lobby) => {
 					socket.emit('serverLeaveLobby', player.username);
 				});
 				playerElement.appendChild(kickButton);
-				/*
-				const makeLeaderButton = document.createElement('button');
-				makeLeaderButton.className = 'player-control';
-				makeLeaderButton.textContent = 'Make Leader';
-				makeLeaderButton.addEventListener('click', () => {
-					// logic // useless atm
-				});
-				playerElement.appendChild(makeLeaderButton);
-				*/
 			}
 			userList.appendChild(playerElement);
 		}
@@ -151,134 +180,124 @@ socket.on('clientUpdateLobby', (lobby) => {
 	}
 	if (lobby.started !== undefined) {
 		switch (lobby.started) {
-			case true:
-				// hide shit, disable buttons
+			case false: // Game ends
+				lobbyObject.classList.remove("hidden");
+				gameObject.classList.add("hidden");
+				myTurn = false;
+				myOffset = -1;
+				playerNameplates.innerHTML = '';
+				// enable buttons, unlock lobby
 				break;
 
-			case false:
-				// show shit, enable buttons
+			case true: // Game starts
+				lobbyObject.classList.add("hidden");
+				gameObject.classList.remove("hidden");
+				// disable buttons, lock lobby
+
+				// game setup
+				drawPile.style.backgroundImage = `url(${skinBack})`;
 				break;
 		}
 	}
 });
 
 
-socket.on('clientLeaveLobby', () => {
-	if (debug) console.log("clientLeaveLobby");
-	currentLobby.textContent = '';
-	userList.innerHTML = '';
-	lobbyInfo.classList.add("hidden");
-	leaveLobbyButton.disabled = true;
-	usernameInput.disabled = false; // temp
+const drawPile = document.getElementById('drawPile');
+drawPile.addEventListener('click', async () => {
+	if (!myTurn) return;
+	socket.emit("serverGameUpdate", ("draw"));
 });
 
-socket.on('clientPopup', async (object) => {
-	if (debug) console.log("clientPopup", object);
-	Swal.fire(object);
-});
+const dropPile = document.getElementById('dropPile');
 
+socket.on('clientGameUpdate', (info, hand) => {
+	if (debug) console.log('clientGameUpdate', info, hand);
+	//  const info = {
+	//  	drawPileCount: 5, // cards left
+	//  	dropPileLast: 40, // card index
+	//  	currentPlayer: 1, // player index in array
+	//  	animation: 40, // animation index (skip animation, reverse, swap cards etc)
+	//  	players: [{
+	//  		name: "Player1",
+	//  		cards: 2,
+	// 			nameplate: "dev"
+	//  	}]
+	//  }
+	//  const hand = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-socket.on('clientJoinedLobby', () => {
-	if (debug) console.log("clientJoinedLobby");
-	lobbyInfo.classList.remove("hidden");
-	leaveLobbyButton.disabled = false;
-	usernameInput.disabled = true; // temp
-});
+	if (info) {
+		// drawPile
+		drawPile.style.backgroundImage = info.drawPileCount > 0 ? `url(${skinBack})` : `url(${emptyStock})`;
 
+		// dropPile
+		dropPile.style.backgroundImage = `url(${skinCards})`;
+		dropPile.style.backgroundSize = `${width}px ${height}px`;
+		dropPile.style.backgroundRepeat = 'no-repeat';
+		let [dpX, dpY] = [info.dropPileLast % totalXs, Math.floor(info.dropPileLast / totalXs)];
+		dropPile.style.backgroundPosition = `-${dpX * cardSpriteWidth}px -${dpY * cardSpriteHeight}px`;
 
-const addC = document.getElementById('addC'); // temp
-const remC = document.getElementById('remC'); // temp
-const hand = [];
-addC.addEventListener('click', async () => {
-	hand.push(Math.floor(Math.random() * 55));
-	renderHand(hand);
-});
-remC.addEventListener('click', async () => {
-	if (hand.length < 1) return;
-	await hand.pop();
-	renderHand(hand);
-});
+		// players
+		playerNameplates.innerHTML = '';
+		ownNameplate.innerHTML = '';
+		const myOffset = info.players.findIndex(i => i.username === username);
+		const players = myOffset === -1 ? info.players : info.players.slice(myOffset).concat(info.players.slice(0, myOffset));
+		const correctCP = myOffset === -1 ? info.currentPlayerIndex : (info.currentPlayerIndex - myOffset + info.players.length) % info.players.length;
+		for (let i = 0; i < players.length; i++) {
+			let nameplate = document.createElement('div');
+			nameplate.style.backgroundImage = `url("./assets/${players[i].nameplate}-nameplate.png")`;
+			let nameplateName = document.createElement('span');
+			nameplateName.classList.add('nameplateName');
+			nameplateName.textContent = players[i].username;
+			nameplate.appendChild(nameplateName);
+
+			let nameplateCardCount = document.createElement('span');
+			nameplateCardCount.classList.add('nameplateCardCount');
+			nameplateCardCount.textContent = players[i].cardCount;
+			nameplate.appendChild(nameplateCardCount);
+			
+			// currentPlayer highlight
+			if (i !== correctCP) nameplate.style.opacity = 0.5;
+			// if (i === correctCP) nameplate.classList.add('playing');
+			
+			if (!correctCP && myOffset > -1) myTurn = true;
+			else myTurn = false;
+
+			if (!i && myOffset > -1) ownNameplate.appendChild(nameplate);
+			else playerNameplates.appendChild(nameplate);
+		}
+	}
+
+	// Hand update
+	if (hand) renderHand(hand);
+})
+
 
 function renderHand(cards) {
-	const playerHand = document.getElementById("playerHand");
 	playerHand.innerHTML = '';
 
 	// left 2,5%+ offset   /* right 87.5%- offset */  limit
 	const mysteriousNumber = Math.min(5, 90 / cards.length);  //  (baseOffset(95) - wanted result) / cards
 	let offsetAmount = 95 - cards.length * mysteriousNumber;
 	let cardOffset = "0%";
-		
-	const [ totalXs, totalYs, width, height ] = [ 10, 6, 1000, 900 ]
-	const cardSpriteWidth = width / totalXs;
-	const cardSpriteHeight = height / totalYs;
-	const spritePath = "./assets/dev-cards.png";
-	
+
 	for (let i = 0; i < cards.length; i++) {
 		cardOffset = `calc(${offsetAmount / 2}% + ${i * mysteriousNumber}%)`;
 		let card = document.createElement('div');
 		card.className = 'card';
 
-		card.style.backgroundImage = `url(${spritePath})`;
+		card.style.backgroundImage = `url(${skinCards})`;
 		card.style.backgroundSize = `${width}px ${height}px`;
 		card.style.backgroundRepeat = 'no-repeat';
-		let [ cardX, cardY] = [ cards[i] % totalXs, Math.ceil(cards[i] / totalXs)-1 ];
+		let [cardX, cardY] = [cards[i] % totalXs, Math.floor(cards[i] / totalXs)];
 		card.style.backgroundPosition = `-${cardX * cardSpriteWidth}px -${cardY * cardSpriteHeight}px`;
 
 		card.style.left = cardOffset;
 		card.style.zIndex = i;
-		card.addEventListener('click', function() {
-			console.log(`You selected card: ${cards[i]}`);
+		card.addEventListener('click', function () {
+			// console.log(`You selected card: ${cards[i]}`);
+			if (!myTurn) return;
+			socket.emit("serverGameUpdate", "playCard", i);
 		});
 		playerHand.appendChild(card);
 	}
 }
-
-
-/*
-function renderHand(cards) {
-  const spritesheet = new Image();
-	spritesheet.src = "./assets/default/deck.svg";
-    
-	spritesheet.onload = function() {
-		const sheetWidth = this.naturalWidth;
-		const sheetHeight = this.naturalHeight;
-
-		const cardWidth = sheetWidth / 14;
-		const cardHeight = sheetHeight / 8;
-	    
-		document.documentElement.style.setProperty('--card-count', cards.length);
-		document.documentElement.style.setProperty('--card-width', `${cardWidth}px`);
-		document.documentElement.style.setProperty('--max-margin-right', `10px`);
-
-		const cardList = document.querySelector('#cardList');
-			cardList.innerHTML = '';
-		for (let card of cards) {
-			const [row, col] = card.split('_').map(Number);
-
-			let listItem = document.createElement('li');
-			listItem.classList.add('card');
-			// listItem.style.marginRight = '10px';     // creates space between cards
-
-			let cardSprite = document.createElement('div');
-
-			// Compute the background position
-			const bgPosX = -col * cardWidth;
-			const bgPosY = -row * cardHeight;
-
-			cardSprite.style.backgroundImage = `url('${spritesheet.src}')`;
-			cardSprite.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
-			cardSprite.style.width = `${cardWidth}px`;
-			cardSprite.style.height = `${cardHeight}px`;
-					// cardSprite.style.transform = "scale(0.25)";
-
-			// Add the click event
-			cardSprite.addEventListener('click', function() {
-				console.log(`You selected card: ${card}`);
-			});
-
-			listItem.appendChild(cardSprite);
-			cardList.appendChild(listItem);
-		}
-	}
-}
-*/
