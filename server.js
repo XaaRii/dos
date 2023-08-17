@@ -75,12 +75,14 @@ io.on('connection', (socket) => {
 			})
 			gameLobby[lobbyCached._id] = {
 				id: lobbyCached._id,
+				pendingAction: 0,
 				modifiers: realLobby.modifiers,
 				drawPile: drawPileCards,
 				dropPileLast: dropPileLast,
 				playerIDs: playerIDs,
 				players: players,
 				currentPlayerIndex: 0,
+				direction: true,
 				hands: hands
 			};
 			console.log("gameLobby[lobbyCached._id]:", gameLobby[lobbyCached._id]);
@@ -93,6 +95,7 @@ io.on('connection', (socket) => {
 					dropPileLast: dropPileLast,
 					players: players,
 					currentPlayerIndex: 0,
+					direction: true,
 					animation: 1 // animation index (skip animation, reverse, swap cards etc)
 				}, hands[i]);
 			}
@@ -119,29 +122,49 @@ io.on('connection', (socket) => {
 				});
 			}
 			const cpi = currentGame.currentPlayerIndex;
-
-			// if not your turn, return
+			// can you play?
 			if (socket.id !== currentGame.playerIDs[cpi].sid) return;
-
+			if (currentGame.pendingAction === 1 && action !== "colorPicker") return;
+			if (currentGame.pendingAction === 2) return;
+			
+			const last = currentGame.dropPileLast;
 			switch (action) {
 				case "playCard": // sec = cardIndex in hand
+					currentGame.pendingAction = 2;
 					const chosenCard = currentGame.hands[cpi][sec];
-					const last = currentGame.dropPileLast;
 					let [chosenX, chosenY] = [chosenCard % totalXs, Math.floor(chosenCard / totalXs)];
 					let [lastX, lastY] = [last % totalXs, Math.floor(last / totalXs)];
-					if (chosenX === lastX || chosenY === lastY || chosenCard > 59) {
-						currentGame.dropPileLast = chosenCard;
-						currentGame.hands[cpi].splice(sec, 1);
-						currentGame.players[cpi].cardCount = currentGame.hands[cpi].length;
-						advanceTurn(currentGame);
+					if (chosenX !== lastX && chosenY !== lastY && chosenCard <= 59) return currentGame.pendingAction = 0;
+					currentGame.dropPileLast = chosenCard;
+					currentGame.hands[cpi].splice(sec, 1);
+					currentGame.players[cpi].cardCount = currentGame.hands[cpi].length;
+					switch (chosenX) {
+						case 0: playSpecialCard("black", currentGame); break;
+						case 1: playSpecialCard("blackfour", currentGame); break;
+						case 12: playSpecialCard("block", currentGame); break;
+						case 13: playSpecialCard("reverse", currentGame); break;
+						case 14: playSpecialCard("plustwo", currentGame); break;
+						default: advanceTurn(currentGame); break;
 					}
 					break;
 
 				case "draw": // sec = none
-					let drawnCard = currentGame.drawPile.shift();
-					currentGame.hands[cpi].push(drawnCard);
-					currentGame.players[cpi].cardCount = currentGame.hands[cpi].length;
-					advanceTurn(currentGame);
+					currentGame.pendingAction = 2;
+					await drawCards(currentGame, 1, 3);
+					break;
+				case "colorPicker": // sec = 0,1,2,3 (red, yellow, green, blue)
+					console.log("colorpicker");
+					if (last < 60) return;
+					if (isNaN(sec) || sec < 0 || 3 < sec) return;
+					console.log("colorpicker");
+					const isFour = last === 61 ? 1 : 0;
+					const picked = sec * totalXs + isFour;
+					currentGame.dropPileLast = picked;
+					socket.emit("clientEdit", "colorPicker", false);
+					advanceTurn(currentGame, 21 + sec);
+					if (!isFour) return;
+					currentGame.pendingAction = 2;
+					await drawCards(currentGame, 4);
 					break;
 
 				default:
@@ -153,25 +176,111 @@ io.on('connection', (socket) => {
 		}
 	});
 
+	async function playSpecialCard(type, currentGame) {
+		if (debug) console.log("playSpecialCard", type);
+		switch (type) {
+			case "black":
+				colorPicker(currentGame, false);
+				break;
+
+			case "blackfour":
+				colorPicker(currentGame, true);
+				break;
+
+			case "block":
+				nextPlayer(currentGame);
+				advanceTurn(currentGame, 11);
+				break;
+
+			case "reverse":
+				if (currentGame.direction) currentGame.direction = false;
+				else currentGame.direction = true;
+				if (currentGame.players.length === 2) {
+					broadcastUpdate(currentGame, 12);
+					handUpdate(currentGame);
+					currentGame.pendingAction = 0;	
+				} else advanceTurn(currentGame, 12);
+				break;
+
+			case "plustwo":
+				nextPlayer(currentGame);
+				await drawCards(currentGame, 2, 13);
+				break;
+
+			default:
+				console.log("Unknown special card type played:", type)
+				break;
+		}
+	}
+	
+	function colorPicker(currentGame) {
+		if (debug) console.log("colorPicker", currentGame);
+		broadcastUpdate(currentGame, 20);
+		handUpdate(currentGame);
+		socket.emit("clientEdit", "colorPicker", true);
+		currentGame.pendingAction = 1;
+	}
+	
 	function advanceTurn(currentGame, action) {
 		if (debug) console.log("advanceTurn", currentGame, action);
-		if (action !== 99) {
-			// update client hand
-			io.to(currentGame.playerIDs[currentGame.currentPlayerIndex].sid).emit('clientGameUpdate', undefined, currentGame.hands[currentGame.currentPlayerIndex]);
-			
-			// next player
-			currentGame.currentPlayerIndex + 1 >= currentGame.players.length ? currentGame.currentPlayerIndex = 0 : currentGame.currentPlayerIndex++;
-		}
+		nextPlayer(currentGame);
+		broadcastUpdate(currentGame, action);
+		currentGame.pendingAction = 0;
+	}
 
-		// broadcast game info
+	function broadcastUpdate(currentGame, action) {
 		io.to(currentGame.id).emit('clientGameUpdate', {
 			drawPileCount: currentGame.drawPile.length,
 			dropPileLast: currentGame.dropPileLast,
 			players: currentGame.players,
 			currentPlayerIndex: currentGame.currentPlayerIndex,
+			direction: currentGame.direction,
 			animation: action ?? 0
 		});
 	}
+
+	async function drawCards(currentGame, times, animation) {
+		const cpi = await currentGame.currentPlayerIndex;
+		for (let i = 0; i < times; i++) {
+			if (debug) console.log("drawCards", i);
+			const drawnCard = await currentGame.drawPile.shift();
+			await currentGame.hands[cpi].push(drawnCard);
+			currentGame.players[cpi].cardCount = await currentGame.hands[cpi].length;
+			if (i + 1 < times) {
+				handUpdate(currentGame);
+				broadcastUpdate(currentGame, 3);
+				await new Promise(resolve => setTimeout(resolve, 500));
+			} else advanceTurn(currentGame, animation);
+		}
+	}
+
+	function nextPlayer(currentGame) {
+		handUpdate(currentGame);
+		// if end
+		if (currentGame.hands[currentGame.currentPlayerIndex].length < 1) {
+			if (!currentGame.modifiers.fullGame || currentGame.players.length < 3) return endscreen(currentGame);
+			fullGameLockin(currentGame);
+		}
+
+		if (currentGame.direction) currentGame.currentPlayerIndex + 1 >= currentGame.players.length ? currentGame.currentPlayerIndex = 0 : currentGame.currentPlayerIndex++;
+		else currentGame.currentPlayerIndex - 1 < 0 ? currentGame.currentPlayerIndex = currentGame.players.length - 1 : currentGame.currentPlayerIndex--;
+		if (debug) console.log("nextPlayer", currentGame.currentPlayerIndex);
+	}
+
+	function handUpdate(currentGame) {
+		io.to(currentGame.playerIDs[currentGame.currentPlayerIndex].sid).emit('clientGameUpdate', undefined, currentGame.hands[currentGame.currentPlayerIndex]);
+		if (debug) console.log("handUpdate", currentGame.currentPlayerIndex);
+	}
+
+	function endscreen(currentGame) {
+		broadcastUpdate(currentGame, 97);
+		socket.emit("clientEdit", "endscreen", {}); /// to be continued
+	}
+
+	function fullGameLockin(currentGame) {
+
+	}
+
 
 	socket.on('serverRefreshLobby', async () => {
 		if (debug) console.log("serverRefreshLobby");
@@ -330,12 +439,14 @@ io.on('connection', (socket) => {
 			if (!game) return;
 			const index = await game.playerIDs.findIndex(n => n.sid === socket.id);
 			if (index < 0) return;
-			await gameLobby[lobby._id].playerIDs.splice(index, 1);
-			await gameLobby[lobby._id].players.splice(index, 1);
-			await gameLobby[lobby._id].hands.splice(index, 1);
-			advanceTurn(gameLobby[lobby._id], 99);
-			if (debug) console.log("disconnect gameLobby[lobby._id]:", gameLobby[lobby._id]);
-
+			await game.playerIDs.splice(index, 1);
+			await game.players.splice(index, 1);
+			await game.hands.splice(index, 1);
+			broadcastUpdate(game, 99);
+			if (game.dropPileLast < 60) return;
+			const isFour = game.dropPileLast === 61 ? 1 : 0;
+			game.dropPileLast = Math.floor(Math.random() * 3) * totalXs + isFour;
+			broadcastUpdate(game, 21 + game.dropPileLast / totalXs - isFour);
 		}
 	});
 });

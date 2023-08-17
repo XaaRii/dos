@@ -14,7 +14,8 @@ function createLobby(lobbyName, username, maxPlayers) {
 		maxPlayers: maxPlayers,
 		players: [],
 		modifiers: {
-			startingCardCount: 7
+			startingCardCount: 7,
+			fullGame: false
 		},
 		started: false
 	};

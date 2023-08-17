@@ -1,0 +1,6 @@
+<svg width="410" height="410" viewBox="0 0 410 410" style="background: black;">
+  <rect x="5" y="5" width="195" height="195" fill="red" class="CPseg" onclick="CPclick(event, 1)"/>
+  <rect x="210" y="5" width="195" height="195" fill="yellow" class="CPseg" onclick="CPclick(event, 2)"/>
+  <rect x="5" y="210" width="195" height="195" fill="green" class="CPseg" onclick="CPclick(event, 3)"/>
+  <rect x="210" y="210" width="195" height="195" fill="blue" class="CPseg" onclick="CPclick(event, 4)"/>
+</svg>

@@ -33,6 +33,7 @@ const usernameInput = document.getElementById('username');
 const lobbyNameInput = document.getElementById('lobby-name');
 const lobbyObject = document.getElementById('lobbyObject');
 const gameObject = document.getElementById('gameObject');
+const overlay = document.getElementById('overlay');
 const playerNameplates = document.getElementById('playerNameplates');
 const playerHand = document.getElementById("playerHand");
 const ownNameplate = document.getElementById('ownNameplate');
@@ -40,7 +41,15 @@ const ownNameplate = document.getElementById('ownNameplate');
 var username = "", isInLobby = false, myTurn = false, myOffset = -1;
 const [totalXs, totalYs, width, height] = [15, 5, 1500, 750];
 const [cardSpriteWidth, cardSpriteHeight] = [width / totalXs, height / totalYs];
-var [skinCards, skinBack, emptyStock] = ["./assets/dev-cards.png", "./assets/dev-back.png", "./assets/empty-stock.png"];
+var [skinCards, skinBack, emptyStock] = ["dev", "dev", "./assets/empty-stock.png"];
+const skinCP = [
+	`<svg id="colorPicker" class="center" width="410" height="410" viewBox="0 0 410 410" style="background: black;">
+	<rect x="5" y="5" width="195" height="195" fill="red" class="CPseg" onclick="CPclick(event, 0)"/>
+	<rect x="210" y="5" width="195" height="195" fill="yellow" class="CPseg" onclick="CPclick(event, 1)"/>
+	<rect x="5" y="210" width="195" height="195" fill="green" class="CPseg" onclick="CPclick(event, 2)"/>
+	<rect x="210" y="210" width="195" height="195" fill="blue" class="CPseg" onclick="CPclick(event, 3)"/>
+	</svg>`
+]
 
 createLobbyForm.addEventListener('submit', (e) => {
 	e.preventDefault();
@@ -117,6 +126,15 @@ socket.on('clientEdit', (thing, value) => {
 			return;
 		// case "usernameLock":
 		// 	return usernameLock = value;
+		case "colorPicker":
+			if (value) {
+				overlay.innerHTML = skinCP[0];
+				overlay.classList.remove("hidden");
+				return;
+			} else {
+				overlay.innerHTML = '';
+				overlay.classList.add("hidden");
+			}
 	}
 })
 
@@ -195,7 +213,7 @@ socket.on('clientUpdateLobby', (lobby) => {
 				// disable buttons, lock lobby
 
 				// game setup
-				drawPile.style.backgroundImage = `url(${skinBack})`;
+				drawPile.style.backgroundImage = `url("./assets/${skinBack}-back.png")`;
 				break;
 		}
 	}
@@ -227,10 +245,10 @@ socket.on('clientGameUpdate', (info, hand) => {
 
 	if (info) {
 		// drawPile
-		drawPile.style.backgroundImage = info.drawPileCount > 0 ? `url(${skinBack})` : `url(${emptyStock})`;
+		drawPile.style.backgroundImage = info.drawPileCount > 0 ? `url("./assets/${skinBack}-back.png")` : `url(${emptyStock})`;
 
 		// dropPile
-		dropPile.style.backgroundImage = `url(${skinCards})`;
+		dropPile.style.backgroundImage = `url("./assets/${skinCards}-cards.png")`;
 		dropPile.style.backgroundSize = `${width}px ${height}px`;
 		dropPile.style.backgroundRepeat = 'no-repeat';
 		let [dpX, dpY] = [info.dropPileLast % totalXs, Math.floor(info.dropPileLast / totalXs)];
@@ -285,7 +303,7 @@ function renderHand(cards) {
 		let card = document.createElement('div');
 		card.className = 'card';
 
-		card.style.backgroundImage = `url(${skinCards})`;
+		card.style.backgroundImage = `url("./assets/${skinCards}-cards.png")`;
 		card.style.backgroundSize = `${width}px ${height}px`;
 		card.style.backgroundRepeat = 'no-repeat';
 		let [cardX, cardY] = [cards[i] % totalXs, Math.floor(cards[i] / totalXs)];
@@ -300,4 +318,8 @@ function renderHand(cards) {
 		});
 		playerHand.appendChild(card);
 	}
+}
+
+function CPclick(event, color) {
+	socket.emit("serverGameUpdate", "colorPicker", color);
 }
