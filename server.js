@@ -4,6 +4,7 @@ const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 var lobbySystem = require('./lobbySystem');
+if (debug) lobbySystem.setDebug(true) & console.log("Debug mode enabled.");
 
 const app = express();
 const server = http.createServer(app);
@@ -27,7 +28,7 @@ if (debug) r.context.sockLobby = sockLobby; /// REPL
 if (debug) r.context.gameLobby = gameLobby; /// REPL
 
 io.on('connection', (socket) => {
-	if (debug) console.log('A user connected at ' + socket.handshake.address + " | " + socket.id);
+	if (debug) console.log("A user connected at " + socket.handshake.address + " | " + socket.id);
 	if (debug) r.context.sock[socket.id] = socket; /// REPL
 	socket.emit('clientLobbyList', lobbySystem.getLobbyList());
 
@@ -43,67 +44,67 @@ io.on('connection', (socket) => {
 			let lobbyList = lobbySystem.getLobbyList();
 			let realLobby = await lobbyList.find(l => l._id === lobbyCached._id);
 			if (!realLobby) return console.error("realLobby wasn't found on game start request");
+			if (socket.id !== realLobby.players[0].sid) {
+				socket.emit('clientEdit', 'isLobbyOwner', false);
+				return socket.emit('clientPopup', {
+					title: 'You are not a lobby owner',
+					icon: 'error',
+					text: 'so stop acting like one',
+					confirmButtonText: 'OK'
+				});
+			}
 			if (realLobby.started) return socket.emit('clientPopup', {
 				title: 'Game is already running.',
 				icon: 'info',
 				confirmButtonText: 'OK'
 			});
-			if (socket.id !== realLobby.players[0].sid) return socket.emit('clientPopup', {
-				title: 'You are not a lobby owner',
-				icon: 'error',
-				text: 'so stop acting like one',
-				confirmButtonText: 'OK'
-			});
 
 			await lobbySystem.startGame(lobbyCached._id);
-			const startingCardCount = realLobby.modifiers.startingCardCount;
-			const playerIDs = shuffle(realLobby.players); // [{ username: "a", sid: "b"}]
-			const players = playerIDs.map(e => ({ // [{ username: "a", cardCount: 0}]
-				username: e.username,
-				cardCount: startingCardCount,
-				nameplate: "dev"
-			}))
-			let drawPileCards = shuffle([...validCardSet, ...validCardSet]);
-			const dropPileLast = validStartCards[Math.floor(Math.random() * validStartCards.length)]
-			const hands = players.map(() => {
-				let hand = drawPileCards.splice(0, startingCardCount);
-				if (hand.length < startingCardCount) {
-					drawPileCards = shuffle([...validCardSet, ...validCardSet]);
-					hand = drawPileCards.splice(0, startingCardCount);
-				}
-				return hand;
-			})
-			gameLobby[lobbyCached._id] = {
-				id: lobbyCached._id,
-				pendingAction: 0,
-				modifiers: realLobby.modifiers,
-				drawPile: drawPileCards,
-				dropPileLast: dropPileLast,
-				playerIDs: playerIDs,
-				players: players,
-				currentPlayerIndex: 0,
-				direction: true,
-				hands: hands
-			};
-			console.log("gameLobby[lobbyCached._id]:", gameLobby[lobbyCached._id]);
-			io.emit('clientLobbyList', lobbySystem.getLobbyList());
-			io.to(lobbyCached._id).emit('clientUpdateLobby', { started: true });
-			for (let i = 0; i < playerIDs.length; i++) {
-				io.to(playerIDs[i].sid).emit('clientGameUpdate', {
-					// (info)
-					drawPileCount: drawPileCards.length,
-					dropPileLast: dropPileLast,
-					players: players,
-					currentPlayerIndex: 0,
-					direction: true,
-					animation: 1 // animation index (skip animation, reverse, swap cards etc)
-				}, hands[i]);
-			}
+			gameStart(lobbyCached, realLobby);
 		} catch (err) {
 			console.error(err);
 		}
 
 	})
+
+	socket.on('serverGameRestart', async () => {
+		if (debug) console.log("serverGameRestart");
+		const lobbyCached = await sockLobby[socket.id];
+		if (!lobbyCached) {
+			await socket.emit('clientEdit', 'isInLobby', false);
+			return socket.emit('clientLeaveLobby');
+		}
+
+		try {
+			let lobbyList = lobbySystem.getLobbyList();
+			let realLobby = await lobbyList.find(l => l._id === lobbyCached._id);
+			if (!realLobby) return console.error("realLobby wasn't found on game start request");
+			if (socket.id !== realLobby.players[0].sid) {
+				socket.emit('clientEdit', 'isLobbyOwner', false);
+				return socket.emit('clientPopup', {
+					title: 'You are not a lobby owner',
+					icon: 'error',
+					text: 'so stop acting like one',
+					confirmButtonText: 'OK'
+				});
+			}
+			if (!realLobby.started) {
+				socket.emit('clientEdit', 'gameStarted', false);
+					return socket.emit('clientPopup', {
+					title: 'There is currently no game running.',
+					icon: 'info',
+					confirmButtonText: 'OK'
+				});
+			}
+
+			gameStart(lobbyCached, realLobby);
+			return io.to(lobbyCached._id).emit('clientPopup', 'close');
+		} catch (err) {
+			console.error(err);
+		}
+
+	})
+
 	socket.on('serverGameUpdate', async (action, sec) => {
 		if (debug) console.log("serverGameUpdate", action, sec);
 		const lobbyCached = await sockLobby[socket.id];
@@ -114,19 +115,30 @@ io.on('connection', (socket) => {
 		try {
 			const currentGame = await gameLobby[lobbyCached._id];
 			if (!currentGame) {
-				socket.emit('clientUpdateLobby', { started: false });
-				return socket.emit('clientPopup', {
-					title: 'This game is already over.',
+				// is the player lobby owner?
+				let lobbyList = lobbySystem.getLobbyList();
+				let realLobby = await lobbyList.find(l => l._id === lobbyCached._id);
+				if (!realLobby) return console.error("realLobby wasn't found on game update request");
+				if (!realLobby.started) socket.emit('clientEdit', "gameStarted", false);
+				else if (socket.id === realLobby.players[0].sid) {
+					await lobbySystem.stopGame(lobbyCached._id);
+					io.emit('clientLobbyList', lobbySystem.getLobbyList());
+					io.to(lobbyCached._id).emit('clientEdit', 'gameStarted', false);
+					io.to(lobbyCached._id).emit('clientPopup', 'close');
+				}
+				socket.emit('clientPopup', {
+					title: 'That game is already over.',
 					icon: 'error',
 					confirmButtonText: 'OK'
 				});
+				return;
 			}
 			const cpi = currentGame.currentPlayerIndex;
 			// can you play?
 			if (socket.id !== currentGame.playerIDs[cpi].sid) return;
-			if (currentGame.pendingAction === 1 && action !== "colorPicker") return;
+			if (currentGame.pendingAction === 1 && action !== 'colorPicker') return;
 			if (currentGame.pendingAction === 2) return;
-			
+
 			const last = currentGame.dropPileLast;
 			switch (action) {
 				case "playCard": // sec = cardIndex in hand
@@ -176,6 +188,54 @@ io.on('connection', (socket) => {
 		}
 	});
 
+	function gameStart(lobbyCached, realLobby) {
+		const startingCardCount = realLobby.modifiers.startingCardCount;
+		const playerIDs = shuffle(realLobby.players); // [{ username: 'a', sid: 'b'}]
+		const players = playerIDs.map(e => ({ // [{ username: 'a', cardCount: 0}]
+			username: e.username,
+			cardCount: startingCardCount,
+			nameplate: 'dev'
+		}))
+		let drawPileCards = shuffle([...validCardSet, ...validCardSet]);
+		const dropPileLast = validStartCards[Math.floor(Math.random() * validStartCards.length)]
+		const hands = players.map(() => {
+			let hand = drawPileCards.splice(0, startingCardCount);
+			if (hand.length < startingCardCount) {
+				drawPileCards = shuffle([...validCardSet, ...validCardSet]);
+				hand = drawPileCards.splice(0, startingCardCount);
+			}
+			return hand;
+		})
+		gameLobby[lobbyCached._id] = {
+			id: lobbyCached._id,
+			modifiers: realLobby.modifiers,
+			startedAt: new Date().getTime(),
+			pendingAction: 0,
+			direction: true,
+			drawPile: drawPileCards,
+			dropPileLast: dropPileLast,
+			playerIDs: playerIDs,
+			players: players,
+			currentPlayerIndex: 0,
+			hands: hands,
+			lockin: [],
+			spectators: [],
+		};
+		console.log("gameLobby[lobbyCached._id]:", gameLobby[lobbyCached._id]);
+		io.emit('clientLobbyList', lobbySystem.getLobbyList());
+		io.to(lobbyCached._id).emit('clientEdit', 'gameStarted', true);
+		for (let i = 0; i < playerIDs.length; i++) {
+			io.to(playerIDs[i].sid).emit('clientGameUpdate', {
+				// (info)
+				drawPileCount: drawPileCards.length,
+				dropPileLast: dropPileLast,
+				players: players,
+				currentPlayerIndex: 0,
+				direction: true,
+				animation: 1 // animation index (skip animation, reverse, swap cards etc)
+			}, hands[i]);
+		}
+	}
 	async function playSpecialCard(type, currentGame) {
 		if (debug) console.log("playSpecialCard", type);
 		switch (type) {
@@ -198,7 +258,7 @@ io.on('connection', (socket) => {
 				if (currentGame.players.length === 2) {
 					broadcastUpdate(currentGame, 12);
 					handUpdate(currentGame);
-					currentGame.pendingAction = 0;	
+					currentGame.pendingAction = 0;
 				} else advanceTurn(currentGame, 12);
 				break;
 
@@ -212,7 +272,7 @@ io.on('connection', (socket) => {
 				break;
 		}
 	}
-	
+
 	function colorPicker(currentGame) {
 		if (debug) console.log("colorPicker", currentGame);
 		broadcastUpdate(currentGame, 20);
@@ -220,7 +280,7 @@ io.on('connection', (socket) => {
 		socket.emit("clientEdit", "colorPicker", true);
 		currentGame.pendingAction = 1;
 	}
-	
+
 	function advanceTurn(currentGame, action) {
 		if (debug) console.log("advanceTurn", currentGame, action);
 		nextPlayer(currentGame);
@@ -233,6 +293,7 @@ io.on('connection', (socket) => {
 			drawPileCount: currentGame.drawPile.length,
 			dropPileLast: currentGame.dropPileLast,
 			players: currentGame.players,
+			lockin: currentGame.lockin,
 			currentPlayerIndex: currentGame.currentPlayerIndex,
 			direction: currentGame.direction,
 			animation: action ?? 0
@@ -258,8 +319,8 @@ io.on('connection', (socket) => {
 		handUpdate(currentGame);
 		// if end
 		if (currentGame.hands[currentGame.currentPlayerIndex].length < 1) {
-			if (!currentGame.modifiers.fullGame || currentGame.players.length < 3) return endscreen(currentGame);
-			fullGameLockin(currentGame);
+			if (currentGame.players.length < 3 || !currentGame.modifiers.fullGame) return endscreen(currentGame, currentGame.currentPlayerIndex);
+			fullGameLockin(currentGame, currentGame.currentPlayerIndex);
 		}
 
 		if (currentGame.direction) currentGame.currentPlayerIndex + 1 >= currentGame.players.length ? currentGame.currentPlayerIndex = 0 : currentGame.currentPlayerIndex++;
@@ -272,15 +333,92 @@ io.on('connection', (socket) => {
 		if (debug) console.log("handUpdate", currentGame.currentPlayerIndex);
 	}
 
-	function endscreen(currentGame) {
+	async function endscreen(currentGame, who) {
 		broadcastUpdate(currentGame, 97);
-		socket.emit("clientEdit", "endscreen", {}); /// to be continued
+		const scrb = [...currentGame.lockin, currentGame.players[who]];
+		await removeFromPlaying(currentGame, who);
+		if (currentGame.players.length > 1) {
+			await handsPointsCount(currentGame.hands);
+			currentGame.players = await currentGame.players.map((player, index) => {
+				return {
+					...player, // username, cardCount
+					handPoints: currentGame.hands[index]
+				};
+			});
+			await currentGame.players.sort((a, b) => a.handPoints - b.handPoints);
+		}
+		scrb.push(...currentGame.players);
+		io.to(currentGame.id).emit("clientEdit", "endscreen", {
+			gameTime: msIntoTime(new Date().getTime() - currentGame.startedAt),
+			scoreboard: scrb
+		});
+		gameLobby[currentGame.id] = undefined;
 	}
 
-	function fullGameLockin(currentGame) {
+	async function handsPointsCount(hands) {
+		for (let i = 0; i < hands.length; i++) {
+			let points = 0;
+			await hands[i].map(card => {
+				card = card % 15;
 
+				if (card < 2) return points += 50;
+				if (card > 11) return points += 20;
+				return points += card - 2;
+			});
+			hands[i] = points;
+		}
 	}
 
+	function fullGameLockin(currentGame, who) {
+		new Promise(async resolve => {
+			await currentGame.lockin.push(currentGame.players[who]);
+			broadcastUpdate(game, 95);
+			await removeFromPlaying(currentGame, who);
+			return resolve;
+		});
+	}
+
+	async function removeFromPlaying(currentGame, who) {
+		await currentGame.playerIDs.splice(who, 1);
+		await currentGame.players.splice(who, 1);
+		await currentGame.hands.splice(who, 1);
+	}
+
+	socket.on('serverGameStop', async () => {
+		if (debug) console.log("serverGameStop");
+		const lobbyCached = await sockLobby[socket.id];
+		if (!lobbyCached) {
+			await socket.emit('clientEdit', 'isInLobby', false);
+			return socket.emit('clientLeaveLobby');
+		}
+		try {
+			let lobbyList = lobbySystem.getLobbyList();
+			let realLobby = await lobbyList.find(l => l._id === lobbyCached._id);
+			if (!realLobby) return console.error("realLobby wasn't found on game stop request");
+			if (socket.id !== realLobby.players[0].sid) {
+				socket.emit('clientEdit', 'isLobbyOwner', false);
+				return socket.emit('clientPopup', {
+					toast: true,
+					title: 'You are not a lobby owner',
+					icon: 'error',
+					text: 'so stop acting like one',
+					confirmButtonText: 'OK'
+				});
+			}
+			if (realLobby.started) await lobbySystem.stopGame(lobbyCached._id);
+			else socket.emit('clientPopup', {
+					title: 'There is currently no game running.',
+					icon: 'info',
+					confirmButtonText: 'OK'
+				});
+			io.emit('clientLobbyList', lobbySystem.getLobbyList());
+			io.to(lobbyCached._id).emit('clientEdit', 'gameStarted', false);
+			io.to(lobbyCached._id).emit('clientPopup', 'close');
+			gameLobby[lobbyCached._id] = undefined;
+		} catch (err) {
+			console.error(err);
+		}
+	});
 
 	socket.on('serverRefreshLobby', async () => {
 		if (debug) console.log("serverRefreshLobby");
@@ -410,19 +548,28 @@ io.on('connection', (socket) => {
 					io.to(lobbyCached._id).emit('clientUpdateLobby', result);
 					delete sockLobby[player.sid];
 				}
-				return;
+			} else {
+				const result = await lobbySystem.removeUser(lobbyCached._id, uname, socket.id);
+				// if (debug) console.log("getLobbyList()", lobbySystem.getLobbyList());
+				io.emit('clientLobbyList', lobbySystem.getLobbyList());
+				await socket.leave(lobbyCached._id);
+				await socket.emit('clientLeaveLobby');
+				await socket.emit('clientEdit', 'isInLobby', false);
+				io.to(lobbyCached._id).emit('clientUpdateLobby', result);
+				delete sockLobby[socket.id];
 			}
-			const result = await lobbySystem.removeUser(lobbyCached._id, uname, socket.id);
-			// if (debug) console.log("getLobbyList()", lobbySystem.getLobbyList());
-			io.emit('clientLobbyList', lobbySystem.getLobbyList());
-			await socket.leave(lobbyCached._id);
-			await socket.emit('clientLeaveLobby');
-			await socket.emit('clientEdit', 'isInLobby', false);
-			io.to(lobbyCached._id).emit('clientUpdateLobby', result);
-			delete sockLobby[socket.id];
-			return;
+			const game = await gameLobby[lobbyCached._id];
+			if (!game) return;
+			const index = await game.playerIDs.findIndex(p => p.username === uname);
+			if (index < 0) return;
+			await removeFromPlaying(game, index);
+			broadcastUpdate(game, 99);
+			if (game.dropPileLast < 60) return;
+			const isFour = game.dropPileLast === 61 ? 1 : 0;
+			game.dropPileLast = Math.floor(Math.random() * 3) * totalXs + isFour;
+			broadcastUpdate(game, 21 + game.dropPileLast / totalXs - isFour);
 		} catch (err) {
-			console.error(err);
+			return console.error(err);
 		}
 	});
 
@@ -436,12 +583,17 @@ io.on('connection', (socket) => {
 			io.emit('clientLobbyList', lobbySystem.getLobbyList());
 			await io.to(lobby._id).emit('clientUpdateLobby', result);
 			delete sockLobby[socket.id];
+			if (!game && lobby.started) {
+				if (socket.id !== lobby.players[0].sid) return;
+				await lobbySystem.stopGame(lobby._id);
+				io.emit('clientLobbyList', lobbySystem.getLobbyList());
+				io.to(lobby._id).emit('clientEdit', 'gameStarted', false);
+				return;
+			}
 			if (!game) return;
 			const index = await game.playerIDs.findIndex(n => n.sid === socket.id);
 			if (index < 0) return;
-			await game.playerIDs.splice(index, 1);
-			await game.players.splice(index, 1);
-			await game.hands.splice(index, 1);
+			await removeFromPlaying(game, index);
 			broadcastUpdate(game, 99);
 			if (game.dropPileLast < 60) return;
 			const isFour = game.dropPileLast === 61 ? 1 : 0;
@@ -449,6 +601,10 @@ io.on('connection', (socket) => {
 			broadcastUpdate(game, 21 + game.dropPileLast / totalXs - isFour);
 		}
 	});
+});
+
+process.on('unhandledRejection', (reason) => {
+	console.log('unhandledRejection', reason);
 });
 
 app.use(express.static('public'));
@@ -464,4 +620,15 @@ function shuffle(array) {
 		[newArray[i], newArray[j]] = [newArray[j], newArray[i]];
 	}
 	return newArray;
+}
+
+function msIntoTime(ms) {
+	var totalSeconds = Math.floor(ms / 1000);
+	var minutes = Math.floor(totalSeconds / 60);
+	var seconds = totalSeconds % 60;
+
+	// Pad the minutes and seconds with leading zeros, if required
+	minutes = (minutes < 10) ? '0' + minutes : minutes;
+	seconds = (seconds < 10) ? '0' + seconds : seconds;
+	return minutes + ':' + seconds;
 }

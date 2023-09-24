@@ -1,6 +1,7 @@
 const Datastore = require('nedb');
 const dbLobby = new Datastore({ inMemoryOnly: true /*filename: 'lobbies.db', autoload: true*/ });
 
+var debug = false;
 var lobbyList = [];
 
 /**
@@ -23,7 +24,7 @@ function createLobby(lobbyName, username, maxPlayers) {
 	return new Promise((resolve, reject) => {
 		dbLobby.insert(newLobby, (err, lobby) => {
 			if (err) reject(err);
-			console.log('New lobby created:', lobby);
+			if (debug) console.log('New lobby created:', lobby);
 			resolve(lobby);
 		});
 	});
@@ -41,7 +42,7 @@ function fetchLobbies() {
 				reject(err);
 			}
 			lobbyList = lobbies;
-			console.log('fetchLobbies():', lobbies);
+			if (debug) console.log('fetchLobbies():', lobbies);
 			return resolve();
 		});
 	});
@@ -57,7 +58,7 @@ function deleteLobby(lobbyId) {
 				console.error('Error deleting lobby:', err);
 				reject(err);
 			}
-			console.log('Lobby deleted:', numRemoved, 'lobby(s) removed');
+			if (debug) console.log('Lobby deleted:', numRemoved, 'lobby(s) removed');
 			fetchLobbies();
 			return resolve();
 		});
@@ -74,7 +75,7 @@ function startGame(lobbyId) {
 				console.error('Error starting the game:', err);
 				reject(err);
 			}
-			console.log('Game started in lobby:', numReplaced, 'lobby(s) updated');
+			if (debug) console.log('Game started in lobby:', numReplaced, 'lobby(s) updated');
 			fetchLobbies();
 			return resolve();
 		});
@@ -91,7 +92,7 @@ function stopGame(lobbyId) {
 				console.error('Error stopping the game:', err);
 				reject(err);
 			}
-			console.log('Game stopped in lobby:', numReplaced, 'lobby(s) updated');
+			if (debug) console.log('Game stopped in lobby:', numReplaced, 'lobby(s) updated');
 			fetchLobbies();
 			return resolve();
 		});
@@ -124,7 +125,7 @@ async function addUser(lobbyId, username, socketId) {
 						console.error('Error adding user to lobby:', err);
 						return reject(err);
 					}
-					console.log('User added to lobby:', numReplaced, 'lobby(s) updated');
+					if (debug) console.log('User added to lobby:', numReplaced, 'lobby(s) updated');
 					try {
 						await fetchLobbies();
 					} catch (err) {
@@ -148,10 +149,10 @@ function removeUser(lobbyId, username, socketId) {
 				console.error('Error removing user from lobby:', err);
 				return reject(err);
 			} else {
-				console.log('User removed from lobby:', numReplaced, 'lobby(s) updated');
+				if (debug) console.log('User removed from lobby:', numReplaced, 'lobby(s) updated');
 				if (err) return console.error('Error removeUser cleanup check:', err);
 				if (document?.players?.length < 1) await dbLobby.remove({ _id: lobbyId }, {}, (e, n) => {
-					console.log("Empty lobby deleted.");
+					if (debug) console.log("Empty lobby deleted.");
 				});
 				await fetchLobbies();
 				return resolve(document);
@@ -169,5 +170,6 @@ module.exports = {
 	stopGame,
 	addUser,
 	removeUser,
-	getLobbyList: function () { return lobbyList; }
+	getLobbyList: function () { return lobbyList; },
+	setDebug: function (value) { debug = value; return; }
 };

@@ -1,6 +1,6 @@
 const debug = true;
 var log = console.log;
-console.log = function () {
+if (debug) console.log = function () {
 	var first_parameter = arguments[0];
 	var other_parameters = Array.prototype.slice.call(arguments, 1);
 	function formatConsoleDate(date) {
@@ -38,10 +38,10 @@ const playerNameplates = document.getElementById('playerNameplates');
 const playerHand = document.getElementById("playerHand");
 const ownNameplate = document.getElementById('ownNameplate');
 
-var username = "", isInLobby = false, myTurn = false, myOffset = -1;
+var username = "", isInLobby = false, isLobbyOwner = false, myTurn = false, myOffset = -1;
 const [totalXs, totalYs, width, height] = [15, 5, 1500, 750];
 const [cardSpriteWidth, cardSpriteHeight] = [width / totalXs, height / totalYs];
-var [skinCards, skinBack, emptyStock] = ["dev", "dev", "./assets/empty-stock.png"];
+var [skinCards, emptyStock] = ["dev", "./assets/empty-stock.png"];
 const skinCP = [
 	`<svg id="colorPicker" class="center" width="410" height="410" viewBox="0 0 410 410" style="background: black;">
 	<rect x="5" y="5" width="195" height="195" fill="red" class="CPseg" onclick="CPclick(event, 0)"/>
@@ -121,11 +121,36 @@ socket.on('clientLobbyList', (lobbies) => {
 socket.on('clientEdit', (thing, value) => {
 	if (debug) console.log('clientEdit', thing, value);
 	switch (thing) {
+		case "isLobbyOwner":
+			isLobbyOwner = value;
+			break;
 		case "isInLobby":
 			isInLobby = value;
-			return;
-		// case "usernameLock":
-		// 	return usernameLock = value;
+			if (value) break;
+			// fall through
+		case "gameStarted":
+			switch (value) {
+				case true: // Game starts
+					lobbyObject.classList.add("hidden");
+					gameObject.classList.remove("hidden");
+					// disable buttons, lock lobby
+
+					// game setup
+					drawPile.style.backgroundImage = `url("./assets/${skinCards}-back.png")`;
+					break;
+
+				case false: // Game ends
+					lobbyObject.classList.remove("hidden");
+					gameObject.classList.add("hidden");
+					myTurn = false;
+					myOffset = -1;
+					playerNameplates.innerHTML = '';
+					overlay.innerHTML = '';
+					overlay.classList.add("hidden");
+					// enable buttons, unlock lobby
+					break;
+			}
+			break;
 		case "colorPicker":
 			if (value) {
 				overlay.innerHTML = skinCP[0];
@@ -135,6 +160,64 @@ socket.on('clientEdit', (thing, value) => {
 				overlay.innerHTML = '';
 				overlay.classList.add("hidden");
 			}
+			break;
+		case "endscreen":
+			const scoreboard = [`Game time: ${value.gameTime}<p></p>`,
+				`<table id="gameEndBoard">
+					<col style="width:7%">
+					<col style="width:80%">
+					<col style="width:13%">
+			`];
+
+			for (let i = 0; i < value.scoreboard.length; i++) {
+				scoreboard.push(`<tr>
+					<td>${i + 1}</td>
+					<td>${value.scoreboard[i].username === username ? `<b>${value.scoreboard[i].username}</b>` : value.scoreboard[i].username}</td>
+					<td>${value.scoreboard[i].handPoints ?? ""}</td>
+			  		</tr>`
+				);
+			}
+			console.log("isLobbyOwner", isLobbyOwner)
+			const SwalScoreboard = {
+				title: 'Game finished!',
+				html: scoreboard.join("") + "</table><p></p>Waiting for lobby owner to start the game...",
+				width: 600,
+				// timer: 10000,
+				// timerProgressBar: true,
+				padding: '3em',
+				color: '#000000',
+				// background: '#fff url(https://sweetalert2.github.io/images/trees.png)',
+				backdrop: `rgba(0,0,0,0.4)`,
+				allowOutsideClick: false,
+				allowEscapeKey: false,
+				allowEnterKey: false,
+				showClass: {
+					popup: 'animate__animated animate__fadeInUp'
+				},
+				hideClass: {
+					popup: 'animate__animated animate__fadeOutDown'
+				},
+				showConfirmButton: isLobbyOwner,
+				showCancelButton: true /*isLobbyOwner*/,
+				confirmButtonText: 'Next game!',
+				cancelButtonText: isLobbyOwner ? 'Back to lobby' : 'Leave lobby'
+			}
+			Swal.fire(SwalScoreboard).then((result) => {
+				if (result.isConfirmed && isLobbyOwner) { /* || (isLobbyOwner && result.dismiss === Swal.DismissReason.timer) */
+					socket.emit("serverGameRestart");
+				} else if (result.isDismissed && result.dismiss === Swal.DismissReason.cancel) {
+					if (isLobbyOwner) {
+						socket.emit("serverGameStop");
+					} else {
+						socket.emit("serverLeaveLobby");
+					}
+				}
+			});
+			document.querySelector('.swal2-cancel').title = isLobbyOwner ? 'Back into lobby' : 'Leave this lobby completely.';
+
+			// document.querySelector('.swal2-confirm').title = 'Only lobby master can press this button.';
+			// document.querySelector('.swal2-confirm').disabled = isLobbyOwner ? false : true;
+			break;
 	}
 })
 
@@ -149,6 +232,7 @@ socket.on('clientLeaveLobby', () => {
 
 socket.on('clientPopup', async (object) => {
 	if (debug) console.log("clientPopup", object);
+	if (object === "close") return Swal.close();
 	Swal.fire(object);
 });
 
@@ -168,12 +252,14 @@ socket.on('clientUpdateLobby', (lobby) => {
 	if (lobby.name !== undefined) currentLobby.textContent = `Current Lobby: ${lobby.name}`;
 	if (lobby.players !== undefined) {
 		userList.innerHTML = '';
+		isLobbyOwner = false;
 		for (let i = 0; i < lobby.players.length; i++) {
 			const player = lobby.players[i];
 			const playerElement = document.createElement('div');
 			const playerText = document.createElement('span');
 			playerText.className = 'player-name';
 			if (!i) {
+				if (socket.id === player.sid) isLobbyOwner = true;
 				startGameButton.disabled = false;
 				startGameButton.classList.remove("hidden");
 				playerText.textContent = "👑 ";
@@ -195,27 +281,6 @@ socket.on('clientUpdateLobby', (lobby) => {
 		socket.id === lobby.players[0].sid ?
 			startGameButton.classList.remove("hidden") :
 			startGameButton.classList.add("hidden");
-	}
-	if (lobby.started !== undefined) {
-		switch (lobby.started) {
-			case false: // Game ends
-				lobbyObject.classList.remove("hidden");
-				gameObject.classList.add("hidden");
-				myTurn = false;
-				myOffset = -1;
-				playerNameplates.innerHTML = '';
-				// enable buttons, unlock lobby
-				break;
-
-			case true: // Game starts
-				lobbyObject.classList.add("hidden");
-				gameObject.classList.remove("hidden");
-				// disable buttons, lock lobby
-
-				// game setup
-				drawPile.style.backgroundImage = `url("./assets/${skinBack}-back.png")`;
-				break;
-		}
 	}
 });
 
@@ -245,7 +310,7 @@ socket.on('clientGameUpdate', (info, hand) => {
 
 	if (info) {
 		// drawPile
-		drawPile.style.backgroundImage = info.drawPileCount > 0 ? `url("./assets/${skinBack}-back.png")` : `url(${emptyStock})`;
+		drawPile.style.backgroundImage = info.drawPileCount > 0 ? `url("./assets/${skinCards}-back.png")` : `url(${emptyStock})`;
 
 		// dropPile
 		dropPile.style.backgroundImage = `url("./assets/${skinCards}-cards.png")`;
@@ -272,11 +337,11 @@ socket.on('clientGameUpdate', (info, hand) => {
 			nameplateCardCount.classList.add('nameplateCardCount');
 			nameplateCardCount.textContent = players[i].cardCount;
 			nameplate.appendChild(nameplateCardCount);
-			
+
 			// currentPlayer highlight
 			if (i !== correctCP) nameplate.style.opacity = 0.5;
 			// if (i === correctCP) nameplate.classList.add('playing');
-			
+
 			if (!correctCP && myOffset > -1) myTurn = true;
 			else myTurn = false;
 
