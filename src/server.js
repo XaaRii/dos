@@ -602,7 +602,7 @@ async function endscreen(currentGame, who) {
 		await currentGame.players.sort((a, b) => a.handPoints - b.handPoints);
 	}
 	scrb.push(...currentGame.players);
-	io.to(currentGame.id).emit("clientEdit", "endscreen", {
+	io.to(currentGame.id).emit("clientEndscreen", {
 		gameTime: msIntoTime(new Date().getTime() - currentGame.startedAt),
 		scoreboard: scrb
 	});

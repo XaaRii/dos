@@ -118,6 +118,65 @@ socket.on('clientLobbyList', (lobbies) => {
 	}
 });
 
+socket.on('clientEndscreen', (object) => {
+	if (debug) console.log("clientEndscreen", object);
+
+	const scoreboard = [`Game time: ${object.gameTime}<p></p>`,
+		`<table id="gameEndBoard">
+		<col style="width:7%">
+		<col style="width:80%">
+		<col style="width:13%">
+`];
+
+	for (let i = 0; i < object.scoreboard.length; i++) {
+		scoreboard.push(`<tr>
+		<td>${i + 1}</td>
+		<td>${object.scoreboard[i].username === username ? `<b>${object.scoreboard[i].username}</b>` : object.scoreboard[i].username}</td>
+		<td>${object.scoreboard[i].handPoints ?? ""}</td>
+		  </tr>`
+		);
+	}
+	console.log("isLobbyOwner", isLobbyOwner)
+	const SwalScoreboard = {
+		title: 'Game finished!',
+		html: scoreboard.join("") + "</table><p></p>Waiting for lobby owner to start the game...",
+		width: 600,
+		// timer: 10000,
+		// timerProgressBar: true,
+		padding: '3em',
+		color: '#000000',
+		// background: '#fff url(https://sweetalert2.github.io/images/trees.png)',
+		backdrop: `rgba(0,0,0,0.4)`,
+		allowOutsideClick: false,
+		allowEscapeKey: false,
+		allowEnterKey: false,
+		showClass: {
+			popup: 'animate__animated animate__fadeInUp'
+		},
+		hideClass: {
+			popup: 'animate__animated animate__fadeOutDown'
+		},
+		showConfirmButton: isLobbyOwner,
+		showCancelButton: true /*isLobbyOwner*/,
+		confirmButtonText: 'Next game!',
+		cancelButtonText: isLobbyOwner ? 'Back to lobby' : 'Leave lobby'
+	}
+	Swal.fire(SwalScoreboard).then((result) => {
+		if (result.isConfirmed && isLobbyOwner) { /* || (isLobbyOwner && result.dismiss === Swal.DismissReason.timer) */
+			socket.emit("serverGameRestart");
+		} else if (result.isDismissed && result.dismiss === Swal.DismissReason.cancel) {
+			if (isLobbyOwner) {
+				socket.emit("serverGameStop");
+			} else {
+				socket.emit("serverLeaveLobby");
+			}
+		}
+	});
+	document.querySelector('.swal2-cancel').title = isLobbyOwner ? 'Back into lobby' : 'Leave this lobby completely.';
+
+	// document.querySelector('.swal2-confirm').title = 'Only lobby master can press this button.';
+	// document.querySelector('.swal2-confirm').disabled = isLobbyOwner ? false : true;
+})
 socket.on('clientEdit', (thing, value) => {
 	if (debug) console.log('clientEdit', thing, value);
 	switch (thing) {
@@ -127,7 +186,7 @@ socket.on('clientEdit', (thing, value) => {
 		case "isInLobby":
 			isInLobby = value;
 			if (value) break;
-			// fall through
+		// fall through
 		case "gameStarted":
 			switch (value) {
 				case true: // Game starts
@@ -161,63 +220,6 @@ socket.on('clientEdit', (thing, value) => {
 				overlay.classList.add("hidden");
 			}
 			break;
-		case "endscreen":
-			const scoreboard = [`Game time: ${value.gameTime}<p></p>`,
-				`<table id="gameEndBoard">
-					<col style="width:7%">
-					<col style="width:80%">
-					<col style="width:13%">
-			`];
-
-			for (let i = 0; i < value.scoreboard.length; i++) {
-				scoreboard.push(`<tr>
-					<td>${i + 1}</td>
-					<td>${value.scoreboard[i].username === username ? `<b>${value.scoreboard[i].username}</b>` : value.scoreboard[i].username}</td>
-					<td>${value.scoreboard[i].handPoints ?? ""}</td>
-			  		</tr>`
-				);
-			}
-			console.log("isLobbyOwner", isLobbyOwner)
-			const SwalScoreboard = {
-				title: 'Game finished!',
-				html: scoreboard.join("") + "</table><p></p>Waiting for lobby owner to start the game...",
-				width: 600,
-				// timer: 10000,
-				// timerProgressBar: true,
-				padding: '3em',
-				color: '#000000',
-				// background: '#fff url(https://sweetalert2.github.io/images/trees.png)',
-				backdrop: `rgba(0,0,0,0.4)`,
-				allowOutsideClick: false,
-				allowEscapeKey: false,
-				allowEnterKey: false,
-				showClass: {
-					popup: 'animate__animated animate__fadeInUp'
-				},
-				hideClass: {
-					popup: 'animate__animated animate__fadeOutDown'
-				},
-				showConfirmButton: isLobbyOwner,
-				showCancelButton: true /*isLobbyOwner*/,
-				confirmButtonText: 'Next game!',
-				cancelButtonText: isLobbyOwner ? 'Back to lobby' : 'Leave lobby'
-			}
-			Swal.fire(SwalScoreboard).then((result) => {
-				if (result.isConfirmed && isLobbyOwner) { /* || (isLobbyOwner && result.dismiss === Swal.DismissReason.timer) */
-					socket.emit("serverGameRestart");
-				} else if (result.isDismissed && result.dismiss === Swal.DismissReason.cancel) {
-					if (isLobbyOwner) {
-						socket.emit("serverGameStop");
-					} else {
-						socket.emit("serverLeaveLobby");
-					}
-				}
-			});
-			document.querySelector('.swal2-cancel').title = isLobbyOwner ? 'Back into lobby' : 'Leave this lobby completely.';
-
-			// document.querySelector('.swal2-confirm').title = 'Only lobby master can press this button.';
-			// document.querySelector('.swal2-confirm').disabled = isLobbyOwner ? false : true;
-			break;
 	}
 })
 
@@ -232,7 +234,7 @@ socket.on('clientLeaveLobby', () => {
 
 socket.on('clientPopup', async (object) => {
 	if (debug) console.log("clientPopup", object);
-	if (object === "close") return Swal.close();
+	// if (object === "close") return Swal.close();
 	Swal.fire(object);
 });
 
