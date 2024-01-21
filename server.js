@@ -98,7 +98,7 @@ io.on('connection', (socket) => {
 			}
 
 			gameStart(lobbyCached, realLobby);
-			return io.to(lobbyCached._id).emit('clientPopup', 'close');
+			return;
 		} catch (err) {
 			console.error(err);
 		}
@@ -124,7 +124,6 @@ io.on('connection', (socket) => {
 					await lobbySystem.stopGame(lobbyCached._id);
 					io.emit('clientLobbyList', lobbySystem.getLobbyList());
 					io.to(lobbyCached._id).emit('clientEdit', 'gameStarted', false);
-					io.to(lobbyCached._id).emit('clientPopup', 'close');
 				}
 				socket.emit('clientPopup', {
 					title: 'That game is already over.',
@@ -135,7 +134,7 @@ io.on('connection', (socket) => {
 			}
 			const cpi = currentGame.currentPlayerIndex;
 			// can you play?
-			if (socket.id !== currentGame.playerIDs[cpi].sid) return;
+			if (socket.id !== currentGame.playerIDs[cpi]?.sid) return;
 			if (currentGame.pendingAction === 1 && action !== 'colorPicker') return;
 			if (currentGame.pendingAction === 2) return;
 
@@ -227,13 +226,13 @@ io.on('connection', (socket) => {
 		for (let i = 0; i < playerIDs.length; i++) {
 			io.to(playerIDs[i].sid).emit('clientGameUpdate', {
 				// (info)
-				drawPileCount: drawPileCards.length,
-				dropPileLast: dropPileLast,
-				players: players,
-				currentPlayerIndex: 0,
-				direction: true,
-				animation: 1 // animation index (skip animation, reverse, swap cards etc)
-			}, hands[i]);
+					drawPileCount: drawPileCards.length,
+					dropPileLast: dropPileLast,
+					players: players,
+					currentPlayerIndex: 0,
+					direction: true,
+					animation: 1 // animation index (skip animation, reverse, swap cards etc)
+				}, hands[i]);
 		}
 	}
 	async function playSpecialCard(type, currentGame) {
@@ -290,14 +289,14 @@ io.on('connection', (socket) => {
 
 	function broadcastUpdate(currentGame, action) {
 		io.to(currentGame.id).emit('clientGameUpdate', {
-			drawPileCount: currentGame.drawPile.length,
-			dropPileLast: currentGame.dropPileLast,
-			players: currentGame.players,
-			lockin: currentGame.lockin,
-			currentPlayerIndex: currentGame.currentPlayerIndex,
-			direction: currentGame.direction,
-			animation: action ?? 0
-		});
+							drawPileCount: currentGame.drawPile.length,
+				dropPileLast: currentGame.dropPileLast,
+				players: currentGame.players,
+				lockin: currentGame.lockin,
+				currentPlayerIndex: currentGame.currentPlayerIndex,
+				direction: currentGame.direction,
+				animation: action ?? 0
+					});
 	}
 
 	async function drawCards(currentGame, times, animation) {
@@ -413,7 +412,6 @@ io.on('connection', (socket) => {
 				});
 			io.emit('clientLobbyList', lobbySystem.getLobbyList());
 			io.to(lobbyCached._id).emit('clientEdit', 'gameStarted', false);
-			io.to(lobbyCached._id).emit('clientPopup', 'close');
 			gameLobby[lobbyCached._id] = undefined;
 		} catch (err) {
 			console.error(err);

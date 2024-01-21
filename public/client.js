@@ -118,7 +118,8 @@ socket.on('clientLobbyList', (lobbies) => {
 	}
 });
 
-socket.on('clientEdit', (thing, value) => {
+socket.on('clientEdit', (object) => {
+	const thing = object["action"], value = object["value"];
 	if (debug) console.log('clientEdit', thing, value);
 	switch (thing) {
 		case "isLobbyOwner":
@@ -293,8 +294,9 @@ drawPile.addEventListener('click', async () => {
 
 const dropPile = document.getElementById('dropPile');
 
-socket.on('clientGameUpdate', (info, hand) => {
-	if (debug) console.log('clientGameUpdate', info, hand);
+socket.on('clientGameUpdate', (object) => {
+	const info = object["gameinfo"], hand = object["hand"];
+	if (debug) console.log('clientGameUpdate', object);
 	//  const info = {
 	//  	drawPileCount: 5, // cards left
 	//  	dropPileLast: 40, // card index
