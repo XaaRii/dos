@@ -161,6 +161,37 @@ function removeUser(lobbyId, username, socketId) {
 	});
 }
 
+/**
+ * Edits game lobby modifiers
+ * @returns {Promise} resolved with { modifiers object }, rejected with error
+ */
+async function modifiers(lobbyId, mods) {
+	return new Promise((resolve, reject) => {
+		dbLobby.findOne({ _id: lobbyId }, async (err, lobby) => {
+			if (err) {
+				console.error('Error adding user to lobby:', err);
+				return reject("error");
+			}
+			if (!lobby) return reject("errorLobbyNotFound");
+            let mergedModifiers = { ...lobby.modifiers, ...mods };
+			dbLobby.update({ _id: lobbyId }, { $set: { "modifiers": mergedModifiers } }, { returnUpdatedDocs: true, multi: false }, async (err, numReplaced, document) => {
+				if (err) {
+					console.error('Error editing lobby modifiers:', err);
+					return reject(err);
+				}
+				if (debug) console.log('Lobby modifiers changed:', numReplaced, 'lobby(s) updated');
+				try {
+					await fetchLobbies();
+				} catch (err) {
+					console.error(err);
+				} finally {
+					resolve(document);
+				}
+			});
+		});
+	});
+}
+
 
 module.exports = {
 	createLobby,
@@ -170,6 +201,7 @@ module.exports = {
 	stopGame,
 	addUser,
 	removeUser,
+	modifiers,
 	getLobbyList: function () { return lobbyList; },
 	setDebug: function (value) { debug = value; return; }
 };

@@ -1,20 +1,20 @@
 const debug = true;
 require('console-stamp')(console);
-		// imports
-const	express = require('express'),
-		http = require('http'),
-		socketIO = require('socket.io'),
-		// server setup
-		app = express(),
-		server = http.createServer(app),
-		io = socketIO(server),
-		port = 3000,
-		// game setup
-		totalXs = 15,
-		validStartCards = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56],
-		validCardSet = [...validStartCards, 12, 13, 14, 27, 28, 29, 42, 43, 44, 57, 58, 59, 60, 60, 61, 61],
-		// imports
-		lobbySystem = require('./lobbyDatabase');
+// imports
+const express = require('express'),
+	http = require('http'),
+	socketIO = require('socket.io'),
+	// server setup
+	app = express(),
+	server = http.createServer(app),
+	io = socketIO(server),
+	port = 3000,
+	// game setup
+	totalXs = 15,
+	validStartCards = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56],
+	validCardSet = [...validStartCards, 12, 13, 14, 27, 28, 29, 42, 43, 44, 57, 58, 59, 60, 60, 61, 61],
+	// imports
+	lobbySystem = require('./lobbyDatabase');
 
 
 if (debug) lobbySystem.setDebug(true) & console.log("Debug mode enabled.");
@@ -51,6 +51,7 @@ io.on('connection', (socket) => {
 	socket.on('serverCreateLobby', async (lobbyName, username) => sockCreateLobby(socket, lobbyName, username));
 	socket.on('serverJoinLobby', async (lobbyId, username) => sockJoinLobby(socket, lobbyId, username));
 	socket.on('serverLeaveLobby', async (who) => sockLeaveLobby(socket, who));
+	socket.on('serverModifiersChange', async (mods) => sockLobbyModifiers(socket, mods));
 
 	// Other
 	socket.on('disconnect', async () => {
@@ -434,6 +435,51 @@ async function sockLeaveLobby(socket, who) {
 	}
 };
 
+
+async function sockLobbyModifiers(socket, mods) {
+	if (debug) console.log("sockLobbyModifiers", mods);
+	const lobbyCached = await sockLobby[socket.id];
+	if (!lobbyCached) {
+		await socket.emit('clientEdit', 'isInLobby', false);
+		return socket.emit('clientLeaveLobby');
+	}
+
+	try {
+		let lobbyList = lobbySystem.getLobbyList();
+		let realLobby = await lobbyList.find(l => l._id === lobbyCached._id);
+		if (!realLobby) return console.error("realLobby wasn't found on game start request");
+		if (socket.id !== realLobby.players[0].sid) {
+			socket.emit('clientEdit', 'isLobbyOwner', false);
+			return socket.emit('clientPopup', {
+				title: 'You are not a lobby owner',
+				icon: 'error',
+				text: 'so stop acting like one',
+				confirmButtonText: 'OK'
+			});
+		}
+		if (realLobby.started) return socket.emit('clientPopup', {
+			title: 'There is an ongoing game, can\'t change modifiers now.',
+			icon: 'error',
+			confirmButtonText: 'OK'
+		});
+
+		try {
+			const result = await lobbySystem.modifiers(lobbyCached._id, mods);
+			io.emit('clientLobbyList', lobbySystem.getLobbyList());
+			io.to(lobbyId).emit('clientUpdateLobby', result);
+		} catch {
+			if (debug) console.log("joinLobbyError:", err);
+			if (err === "errorLobbyNotFound") return socket.emit('clientPopup', {
+				title: 'Something unexpected happened.',
+				icon: 'error',
+				text: 'Report this to website administrator. ERR: lobby_not_found',
+				confirmButtonText: 'OK'
+			});
+		}
+	} catch (err) {
+		console.error(err);
+	}
+};
 
 
 
